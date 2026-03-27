@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contador App</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+<style>
+:root{
+  --bg:#07111a;
+  --bg-2:#0d1c28;
+  --side:#08131d;
+  --panel:#0e1823cc;
+  --panel-solid:#101b27;
+  --card:#142231;
+  --card-2:#192b3d;
+  --accent:#ff7a18;
+  --accent-2:#ffb347;
+  --mint:#3dd9b2;
+  --danger:#ff6b6b;
+  --text:#eff7ff;
+  --text-s:#92a8bf;
+  --text-d:#6e859a;
+  --border:rgba(255,255,255,.08);
+  --shadow:0 30px 80px rgba(0,0,0,.45);
+}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Plus Jakarta Sans',sans-serif}
+html{background:
+  radial-gradient(circle at top left, rgba(255,122,24,.18), transparent 28%),
+  radial-gradient(circle at 85% 12%, rgba(61,217,178,.16), transparent 24%),
+  linear-gradient(180deg, var(--bg) 0%, #04090e 100%)}
+body{
+  background:transparent;
+  color:var(--text);
+  display:flex;
+  min-height:100vh;
+  position:relative;
+  overflow-x:hidden
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  background:
+    linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px);
+  background-size:26px 26px;
+  mask-image:linear-gradient(180deg, rgba(0,0,0,.55), transparent 92%);
+  pointer-events:none;
+}
+#app{width:100%}
+aside{
+  width:280px;
+  background:linear-gradient(180deg, rgba(5,12,19,.92), rgba(9,19,30,.84));
+  backdrop-filter:blur(18px);
+  padding:28px 22px;
+  position:fixed;
+  height:100vh;
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  box-shadow:var(--shadow);
+}
+main{
+  margin-left:280px;
+  padding:28px;
+  width:calc(100% - 280px);
+}
+.brand{
+  padding:18px 18px 22px;
+  border-radius:26px;
+  background:
+    radial-gradient(circle at top right, rgba(255,179,71,.28), transparent 35%),
+    linear-gradient(145deg, rgba(255,122,24,.18), rgba(255,255,255,.02));
+  border:1px solid rgba(255,255,255,.08);
+  margin-bottom:16px;
+}
+.brand h2{font-size:2rem;letter-spacing:-.04em}
+.brand p{color:var(--text-s);font-size:.86rem;line-height:1.5;margin-top:10px}
+.nav-item{
+  padding:13px 16px;
+  border-radius:16px;
+  cursor:pointer;
+  color:var(--text-s);
+  margin-bottom:8px;
+  border:1px solid transparent;
+  transition:.22s ease;
+}
+.nav-item:hover{
+  background:rgba(255,255,255,.05);
+  color:#fff;
+  transform:translateX(2px);
+  border-color:rgba(255,255,255,.06);
+}
+.nav-group{
+  font-size:.68rem;
+  font-weight:800;
+  color:var(--text-d);
+  margin:18px 0 8px 8px;
+  text-transform:uppercase;
+  letter-spacing:.16em
+}
+.profile-chip{
+  margin-top:auto;
+  padding:16px;
+  border-radius:20px;
+  background:rgba(255,255,255,.04);
+  border:1px solid var(--border);
+}
+.profile-chip p{font-size:.85rem;color:var(--text-s);line-height:1.5}
+.view{display:none}
+.view.active{display:block}
+.hero{
+  position:relative;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 80% 20%, rgba(255,179,71,.18), transparent 22%),
+    radial-gradient(circle at 15% 18%, rgba(61,217,178,.14), transparent 18%),
+    linear-gradient(135deg, rgba(17,29,42,.94), rgba(10,17,24,.9));
+  border:1px solid var(--border);
+  border-radius:30px;
+  padding:24px;
+  margin-bottom:18px;
+  box-shadow:var(--shadow);
+}
+.hero::after{
+  content:"";
+  position:absolute;
+  inset:auto -60px -70px auto;
+  width:240px;
+  height:240px;
+  border-radius:50%;
+  background:radial-gradient(circle, rgba(255,122,24,.24), transparent 68%);
+  filter:blur(8px);
+}
+.hero-top{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:start;
+  gap:22px;
+  margin-bottom:20px;
+}
+.hero-copy h1{
+  font-size:clamp(2.1rem, 3vw, 3.25rem);
+  line-height:.98;
+  letter-spacing:-.05em;
+  max-width:900px;
+}
+.hero-copy h1 span{
+  display:block;
+}
+.hero-copy p{
+  color:var(--text-s);
+  margin-top:14px;
+  max-width:760px;
+  line-height:1.65;
+  font-size:.98rem;
+}
+.hero-badge{
+  padding:10px 14px;
+  border-radius:999px;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.08);
+  color:var(--text-s);
+  font-size:.78rem;
+  white-space:nowrap;
+  justify-self:end;
+}
+.control-bar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:center;
+}
+.status-grid{
+  display:grid;
+  grid-template-columns:1.25fr 1.25fr 1.1fr 1.5fr;
+  gap:12px;
+  margin-top:18px;
+}
+.status-pill{
+  min-height:96px;
+  border-radius:18px;
+  padding:16px 18px;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.07);
+}
+.status-pill .label{
+  font-size:.9rem;
+  color:#ffd36c;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  font-weight:800;
+}
+.status-pill .text{
+  margin-top:10px;
+  color:#dce8f4;
+  font-size:1.06rem;
+  line-height:1.6;
+}
+.eta-wrap{
+  margin-top:10px;
+}
+.eta-bar{
+  width:100%;
+  height:10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.06);
+}
+.eta-fill{
+  height:100%;
+  width:0%;
+  border-radius:999px;
+  background:linear-gradient(90deg, var(--mint), var(--accent-2));
+  box-shadow:0 0 18px rgba(61,217,178,.28);
+  transition:width .25s ease;
+}
+.eta-meta{
+  margin-top:8px;
+  color:var(--text-s);
+  font-size:.86rem;
+}
+.table-wrap{
+  background:linear-gradient(180deg, rgba(14,24,35,.94), rgba(10,17,24,.92));
+  border:1px solid var(--border);
+  border-radius:24px;
+  overflow:auto;
+  box-shadow:var(--shadow);
+}
+.panel{
+  background:linear-gradient(180deg, rgba(14,24,35,.95), rgba(9,16,24,.92));
+  border:1px solid var(--border);
+  border-radius:24px;
+  padding:22px;
+  box-shadow:var(--shadow);
+}
+.input-pro{
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;
+  padding:.8rem .95rem;
+  color:#fff;
+  font-size:.88rem;
+  min-height:48px;
+  outline:none;
+}
+.input-pro:focus{
+  border-color:rgba(255,179,71,.45);
+  box-shadow:0 0 0 4px rgba(255,122,24,.12);
+}
+.btn{
+  padding:.82rem 1.05rem;
+  border:none;
+  border-radius:14px;
+  cursor:pointer;
+  color:#fff;
+  font-weight:700;
+  min-height:48px;
+  transition:.2s ease;
+}
+.btn:hover{transform:translateY(-1px)}
+.btn-p{
+  background:linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow:0 10px 30px rgba(255,122,24,.28);
+}
+.btn-s{
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.08);
+  color:var(--text);
+}
+table{width:100%;border-collapse:collapse;font-size:.76rem}
+th,td{
+  padding:1rem .65rem;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  text-align:left;
+  vertical-align:top
+}
+thead th{
+  position:sticky;
+  top:0;
+  background:linear-gradient(180deg, rgba(26,40,56,.98), rgba(17,28,40,.98));
+  color:#ffd36c;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  font-size:.72rem;
+  z-index:1;
+  border-bottom:1px solid rgba(255,179,71,.2);
+}
+tbody td{color:#e4eef8}
+tbody tr:nth-child(odd){background:rgba(255,255,255,.012)}
+tbody tr:nth-child(even){background:rgba(255,255,255,.026)}
+tbody tr:hover{
+  background:linear-gradient(90deg, rgba(255,179,71,.08), rgba(61,217,178,.05));
+  box-shadow:inset 3px 0 0 rgba(255,179,71,.65);
+}
+#auth{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:
+    radial-gradient(circle at top left, rgba(255,122,24,.18), transparent 24%),
+    radial-gradient(circle at bottom right, rgba(61,217,178,.14), transparent 24%),
+    linear-gradient(180deg, rgba(3,7,11,.92), rgba(4,9,14,.98));
+}
+.box{
+  background:linear-gradient(180deg, rgba(8,18,28,.92), rgba(9,16,24,.96));
+  border:1px solid rgba(255,255,255,.08);
+  padding:2rem;
+  border-radius:28px;
+  width:480px;
+  box-shadow:var(--shadow)
+}
+.auth-title{font-size:2rem;letter-spacing:-.05em;margin-bottom:.6rem}
+.auth-copy{color:var(--text-s);line-height:1.6;margin-bottom:1.2rem}
+.stack{display:flex;gap:10px;flex-wrap:wrap}
+.kpi{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:16px;
+  margin-bottom:20px
+}
+.card{
+  position:relative;
+  overflow:hidden;
+  background:
+    linear-gradient(180deg, rgba(23,37,53,.94), rgba(13,22,31,.95));
+  border:1px solid rgba(255,255,255,.07);
+  padding:20px 18px 18px;
+  border-radius:20px;
+  text-align:left;
+  min-height:132px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.04),
+    0 16px 34px rgba(0,0,0,.24);
+}
+.card::after{
+  content:"";
+  position:absolute;
+  inset:auto -24px -28px auto;
+  width:88px;height:88px;border-radius:50%;
+  background:radial-gradient(circle, rgba(255,122,24,.18), transparent 70%);
+}
+.card::before{
+  content:"";
+  position:absolute;
+  inset:0 auto 0 0;
+  width:4px;
+  background:linear-gradient(180deg, var(--accent-2), var(--mint));
+}
+.label{
+  font-size:.84rem;
+  color:#ffd36c;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  font-weight:800
+}
+.value{
+  font-size:clamp(1.65rem, 2vw, 2.5rem);
+  font-weight:800;
+  letter-spacing:-.04em;
+  line-height:1.02;
+  margin-top:12px;
+  color:#f7fbff;
+  text-shadow:0 0 18px rgba(255,255,255,.06);
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}
+.table-wrap table tbody td:first-child{
+  color:#ffd36c;
+  font-weight:700;
+}
+.table-wrap table tbody td:nth-child(2){
+  color:#b8d5ef;
+}
+.table-wrap table tbody td:last-child{
+  color:#fff;
+}
+.section-title{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+.section-title h3{
+  font-size:1.1rem;
+  letter-spacing:-.03em;
+}
+.section-title p{color:var(--text-s);font-size:.86rem}
+@media (max-width: 1100px){
+  aside{position:static;width:100%;height:auto}
+  main{margin-left:0;width:100%;padding:18px}
+  body{display:block}
+  .status-grid{grid-template-columns:1fr}
+  .hero-top{grid-template-columns:1fr}
+  .hero-badge{justify-self:start}
+  .kpi{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width: 700px){
+  .kpi{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div id="auth">
+  <div class="box">
+    <div id="login">
+      <div class="auth-title">Contador App</div>
+      <p class="auth-copy">Consola operativa para procesar facturas, monitorear la cola y consolidar impuestos sin perder el contexto contable.</p>
+      <input id="l-email" class="input-pro" placeholder="Email" style="width:100%;margin-bottom:.8rem">
+      <input id="l-pwd" type="password" class="input-pro" placeholder="Clave" style="width:100%;margin-bottom:.8rem">
+      <button class="btn btn-p" style="width:100%" onclick="login()">Ingresar</button>
+      <div class="stack" style="margin-top:1rem">
+        <p style="color:var(--text-s);cursor:pointer" onclick="toggleReg(true)">Registrar empresa</p>
+        <p style="color:var(--text-s);cursor:pointer" onclick="forgotPassword()">Olvide mi clave</p>
+      </div>
+    </div>
+    <div id="register" style="display:none">
+      <div class="auth-title">Nueva Empresa</div>
+      <p class="auth-copy">Crea el tenant inicial y arranca con un workspace listo para cargar documentos y trabajar en equipo.</p>
+      <input id="r-comp" class="input-pro" placeholder="Empresa" style="width:100%;margin-bottom:.8rem">
+      <input id="r-name" class="input-pro" placeholder="Nombre" style="width:100%;margin-bottom:.8rem">
+      <input id="r-email" class="input-pro" placeholder="Email" style="width:100%;margin-bottom:.8rem">
+      <input id="r-pwd" type="password" class="input-pro" placeholder="Clave" style="width:100%;margin-bottom:.8rem">
+      <button class="btn btn-p" style="width:100%" onclick="registerCompany()">Crear</button>
+      <p style="margin-top:1rem;color:var(--text-s);cursor:pointer" onclick="toggleReg(false)">Volver</p>
+    </div>
+  </div>
+</div>
+
+<div id="app" style="display:none;width:100%">
+  <aside>
+    <div class="brand">
+      <h2>Contador</h2>
+      <p>Tablero de captura, revision y control contable para lotes variables de facturas colombianas.</p>
+    </div>
+    <div class="nav-group">Workspace</div>
+    <div class="nav-item" onclick="setView('main')">Inbox</div>
+    <div class="nav-item" onclick="setView('account')">Mi Cuenta</div>
+    <div id="company-nav" style="display:none">
+      <div class="nav-group">Empresa</div>
+      <div class="nav-item" onclick="setView('team')">Equipo</div>
+      <div class="nav-item" onclick="setView('audit')">Auditoria</div>
+    </div>
+    <div class="profile-chip">
+      <p id="usr"></p>
+      <button class="btn btn-s" style="width:100%;margin-top:1rem" onclick="logout()">Cerrar sesion</button>
+    </div>
+  </aside>
+  <main>
+    <div id="v-main" class="view active">
+      <div class="hero">
+        <div class="hero-top">
+          <div class="hero-copy">
+            <h1>
+              <span>Centro de lectura contable</span>
+              <span>para documentos reales y formatos variables.</span>
+            </h1>
+            <p>Sube facturas sueltas o carpetas completas, controla la cola, revisa diferencias y consolida impuestos desde un mismo lugar sin perder trazabilidad.</p>
+          </div>
+          <div class="hero-badge">Operacion tributaria en vivo</div>
+        </div>
+        <div class="control-bar">
+          <select id="scope" class="input-pro" onchange="loadDocs()"><option value="mine">Mis documentos</option><option value="all">Toda la empresa</option></select>
+          <button class="btn btn-s" onclick="loadDocs()">Refrescar</button>
+          <button class="btn btn-s" onclick="clearQueue()">Vaciar cola</button>
+          <button class="btn btn-s" onclick="retryFailed()">Reenviar fallidos</button>
+          <button class="btn btn-s" onclick="reprocessCompleted()">Reprocesar completados</button>
+          <button class="btn btn-s" onclick="cleanup()">Limpiar</button>
+          <button class="btn btn-s" onclick="exportExcel()">Excel</button>
+          <input type="file" id="fi" multiple accept=".pdf" style="display:none">
+          <input type="file" id="folder" multiple accept=".pdf" webkitdirectory directory style="display:none">
+          <button class="btn btn-s" onclick="document.getElementById('folder').click()">Carpeta</button>
+          <button class="btn btn-p" onclick="document.getElementById('fi').click()">PDFs</button>
+        </div>
+        <div class="status-grid">
+          <div class="status-pill">
+            <div class="label">Sesion</div>
+            <div class="text" id="session-status"></div>
+          </div>
+          <div class="status-pill">
+            <div class="label">Cola</div>
+            <div class="text" id="queue-status"></div>
+          </div>
+          <div class="status-pill">
+            <div class="label">Carga</div>
+            <div class="text" id="upload-status"></div>
+          </div>
+          <div class="status-pill">
+            <div class="label">Estimado</div>
+            <div class="text" id="eta-status">Sin carga activa.</div>
+            <div class="eta-wrap">
+              <div class="eta-bar"><div class="eta-fill" id="eta-fill"></div></div>
+              <div class="eta-meta" id="eta-meta">0%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="kpi" id="kpis"></div>
+      <div class="panel" style="padding:0;overflow:hidden">
+        <div class="section-title" style="padding:22px 22px 0 22px">
+          <div>
+            <h3>Documentos procesados</h3>
+            <p>Vista consolidada de estados, bases, IVA, retenciones y diferencias por factura.</p>
+          </div>
+        </div>
+        <div class="table-wrap" style="background:transparent;border:none;box-shadow:none">
+          <table><thead><tr><th></th><th>Estado</th><th>Origen</th><th>Fecha</th><th>NIT</th><th>Factura</th><th>Total Factura</th><th>Base Exento</th><th>Base IVA 5</th><th>IVA 5</th><th>Base IVA 8</th><th>IVA 8</th><th>Base IVA 19</th><th>IVA 19</th><th>ReteFuente</th><th>ReteIVA</th><th>ReteICA</th><th>Imp Consumo</th><th>Diferencia</th><th>Archivo / Accion</th></tr></thead><tbody id="docs"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <div id="v-account" class="view">
+      <div class="panel">
+        <div class="section-title">
+          <div>
+            <h3>Cambiar clave</h3>
+            <p>Actualiza tus credenciales sin salir del workspace.</p>
+          </div>
+        </div>
+        <div class="stack">
+          <input id="current-password" type="password" class="input-pro" placeholder="Clave actual" style="width:220px">
+          <input id="new-password" type="password" class="input-pro" placeholder="Nueva clave" style="width:220px">
+          <button class="btn btn-p" onclick="changePassword()">Guardar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="v-team" class="view">
+      <div class="panel" style="margin-bottom:18px">
+        <div class="section-title">
+          <div>
+            <h3>Equipo de trabajo</h3>
+            <p>Crea usuarios, asigna perfiles y controla acceso por empresa.</p>
+          </div>
+        </div>
+        <div class="stack">
+          <input id="team-name" class="input-pro" placeholder="Nombre">
+          <input id="team-email" class="input-pro" placeholder="Email">
+          <input id="team-password" type="password" class="input-pro" placeholder="Clave temporal">
+          <select id="team-role" class="input-pro"><option value="user">Operador</option><option value="viewer">Solo lectura</option><option value="admin">Admin</option></select>
+          <button class="btn btn-p" onclick="createUser()">Agregar</button>
+        </div>
+      </div>
+      <div class="panel" style="padding:0;overflow:hidden">
+        <div class="section-title" style="padding:22px 22px 0 22px">
+          <div>
+            <h3>Usuarios</h3>
+            <p>Administra roles, activacion y reseteo de credenciales.</p>
+          </div>
+        </div>
+        <div class="table-wrap" style="background:transparent;border:none;box-shadow:none"><table><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Activo</th><th>Accion</th></tr></thead><tbody id="team"></tbody></table></div>
+      </div>
+    </div>
+
+    <div id="v-audit" class="view">
+      <div class="panel" style="padding:0;overflow:hidden">
+        <div class="section-title" style="padding:22px 22px 0 22px">
+          <div>
+            <h3>Auditoria</h3>
+            <p>Trazabilidad operativa de acciones, usuarios y objetos modificados.</p>
+          </div>
+        </div>
+        <div class="table-wrap" style="background:transparent;border:none;box-shadow:none"><table><thead><tr><th>Fecha</th><th>Actor</th><th>Accion</th><th>Objeto</th><th>Detalle</th></tr></thead><tbody id="audit"></tbody></table></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+let me = null;
+let docs = [];
+let teamUsers = [];
+let docsRefreshHandle = null;
+let expandedDocs = new Set();
+
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const numberFmt = new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const cur = (v) => `$ ${numberFmt.format(num(v))}`;
+
+async function req(url, opt = {}) {
+  const r = await fetch(url, { ...opt, credentials: 'same-origin', headers: { ...(opt.headers || {}) } });
+  const t = await r.text();
+  let d = {};
+  try { d = t ? JSON.parse(t) : {}; } catch (_) {}
+  return { ok: r.ok, status: r.status, data: d };
+}
+
+function canManage() { return me && (me.role === 'admin' || me.is_superadmin); }
+function isAuthFailure(r) {
+  const msg = String(r?.data?.error || '').toLowerCase();
+  return r.status === 401 || (r.status === 403 && (msg.includes('sesion') || msg.includes('acceso denegado') || msg.includes('usuario desactivado') || msg.includes('usuario no encontrado') || msg.includes('sesion invalidada')));
+}
+async function api(url, opt = {}) {
+  const r = await req(url, opt);
+  if (url !== '/api/auth/me' && isAuthFailure(r)) { await logout(); return null; }
+  if (r.status === 402) { alert(r.data.error || 'Suscripcion vencida'); await logout(); return null; }
+  return r.data;
+}
+
+function setUploadStatus(message, isError = false) {
+  const el = document.getElementById('upload-status');
+  if (!el) return;
+  el.style.color = isError ? '#fca5a5' : 'var(--text-s)';
+  el.textContent = message || '';
+}
+function setSessionStatus(text) {
+  const el = document.getElementById('session-status');
+  if (el) el.textContent = text || '';
+}
+function setQueueStatus(text, isError = false) {
+  const el = document.getElementById('queue-status');
+  if (!el) return;
+  el.style.color = isError ? '#fca5a5' : 'var(--text-s)';
+  el.textContent = text || '';
+}
+function setEtaStatus(text, isError = false) {
+  const el = document.getElementById('eta-status');
+  if (!el) return;
+  el.style.color = isError ? '#fca5a5' : 'var(--text-s)';
+  el.textContent = text || '';
+}
+function setEtaProgress(percent, metaText = '') {
+  const fill = document.getElementById('eta-fill');
+  const meta = document.getElementById('eta-meta');
+  if (fill) fill.style.width = `${Math.max(0, Math.min(100, Number(percent) || 0))}%`;
+  if (meta) meta.textContent = metaText || '';
+}
+function formatEta(seconds) {
+  const total = Math.max(0, Math.ceil(Number(seconds) || 0));
+  if (total < 60) return `${total}s`;
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}m ${secs}s`;
+}
+function startDocsAutoRefresh() {
+  if (docsRefreshHandle) clearInterval(docsRefreshHandle);
+  docsRefreshHandle = setInterval(() => {
+    if (me && document.getElementById('v-main')?.classList.contains('active')) loadDocs();
+  }, 5000);
+}
+
+function toggleReg(on) {
+  document.getElementById('login').style.display = on ? 'none' : 'block';
+  document.getElementById('register').style.display = on ? 'block' : 'none';
+}
+
+async function login() {
+  const r = await req('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: document.getElementById('l-email').value, password: document.getElementById('l-pwd').value }) });
+  if (!r.ok) return alert(r.data.error || 'Error');
+  await init();
+}
+
+async function registerCompany() {
+  const r = await req('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company_name: document.getElementById('r-comp').value, name: document.getElementById('r-name').value, email: document.getElementById('r-email').value, password: document.getElementById('r-pwd').value }) });
+  if (!r.ok) return alert(r.data.error || 'Error');
+  alert(r.data.message || 'Solicitud enviada. La empresa quedo pendiente de aprobacion.');
+  document.getElementById('r-comp').value = '';
+  document.getElementById('r-name').value = '';
+  document.getElementById('r-email').value = '';
+  document.getElementById('r-pwd').value = '';
+  toggleReg(false);
+}
+
+async function forgotPassword() {
+  const email = prompt('Correo del usuario');
+  if (!email) return;
+  const r = await req('/api/auth/forgot-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+  if (!r.ok) return alert(r.data.error || 'Error');
+  if (!r.data.reset_token) return alert(r.data.message || 'Si el usuario existe, se envio o genero el enlace de recuperacion');
+  const password = prompt('Nueva clave');
+  if (!password) return;
+  const rr = await req('/api/auth/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: r.data.reset_token, password }) });
+  alert(rr.data.message || rr.data.error || 'Proceso completado');
+}
+
+async function logout() { await req('/api/auth/logout', { method: 'POST' }); location.reload(); }
+
+function setView(v) {
+  document.querySelectorAll('.view').forEach((x) => x.classList.remove('active'));
+  document.getElementById('v-' + v).classList.add('active');
+  if (v === 'main') loadDocs();
+  if (v === 'team') loadTeam();
+  if (v === 'audit') loadAudit();
+}
+
+function renderShell() {
+  document.getElementById('auth').style.display = me ? 'none' : 'flex';
+  document.getElementById('app').style.display = me ? 'block' : 'none';
+  document.getElementById('usr').innerText = me ? `${me.name} - Empresa ${me.company_id}` : '';
+  document.getElementById('company-nav').style.display = canManage() ? 'block' : 'none';
+  document.getElementById('scope').style.display = canManage() ? 'block' : 'none';
+}
+
+function parseExtraction(item) {
+  let ed = item.extracted_data;
+  if (!ed) return null;
+  if (typeof ed === 'string') { try { ed = JSON.parse(ed); } catch (_) { return null; } }
+  if (typeof ed !== 'object') return null;
+
+  const fileName = String(item.original_filename || item.filename || '');
+  const fileInvoiceMatch =
+    fileName.match(/\(([A-Z0-9-]{3,})\)/i) ||
+    fileName.match(/\b([A-Z]{2,10}-\d{2,})\b/i) ||
+    fileName.match(/\b(\d{3,}-\d{3,})\b/i);
+  const invoiceFromFile = fileInvoiceMatch ? fileInvoiceMatch[1] : '';
+
+  const ivaRows = Array.isArray(ed.ivasDiscriminados) ? ed.ivasDiscriminados : [];
+  const pick = (pct) => ivaRows.find((x) => Number(x.porcentaje) === Number(pct)) || {};
+  const iva0 = pick(0), iva5 = pick(5), iva8 = pick(8), iva19 = pick(19);
+  const totalFactura = num(ed.total);
+  const zeroTax = ed.zeroTaxBreakdown || {};
+  const baseExenta = num(ed.baseExenta ?? zeroTax.exenta ?? 0);
+  const baseExcluida = num(ed.baseExcluida ?? zeroTax.excluida ?? 0);
+  const baseNoGravada = num(ed.baseNoGravada ?? zeroTax.no_gravada ?? 0);
+  const baseExento = num(ed.baseExento ?? iva0.base ?? (baseExenta + baseExcluida + baseNoGravada));
+  const base5 = num(iva5.base ?? ed.base5 ?? 0);
+  const valIva5 = num(iva5.valor ?? ed.iva5 ?? 0);
+  const base8 = num(iva8.base ?? ed.base8 ?? 0);
+  const valIva8 = num(iva8.valor ?? ed.iva8 ?? 0);
+  const base19 = num(iva19.base ?? ed.base19 ?? 0);
+  const valIva19 = num(iva19.valor ?? ed.iva19 ?? 0);
+  const reteFuente = num(ed.reteFuente);
+  const reteIva = num(ed.reteIva);
+  const reteIca = num(ed.reteIca);
+  const impuestoConsumo = num(ed.impuestoConsumo);
+  const totalCalculado = (baseExento + base5 + base8 + base19) + (valIva5 + valIva8 + valIva19) + impuestoConsumo - (reteFuente + reteIva + reteIca);
+  const diferencia = num(ed?.validacion?.diferenciaTotal ?? (totalFactura - totalCalculado));
+  const detalleProductos = Array.isArray(ed.detalleProductos) ? ed.detalleProductos : [];
+
+  return {
+    documentId: item.id,
+    extractionSource: ed.extractionSource || 'desconocido',
+    nit: ed.nitEmisor || ed.nitAdquirente || ed.nit || '',
+    factura: ed.numeroFactura || [ed.prefijo, ed.numero].filter(Boolean).join('-') || invoiceFromFile || ed.cufe || '',
+    totalFactura,
+    baseExento,
+    baseExenta,
+    baseExcluida,
+    baseNoGravada,
+    base5,
+    iva5: valIva5,
+    base8,
+    iva8: valIva8,
+    base19,
+    iva19: valIva19,
+    reteFuente,
+    reteIva,
+    reteIca,
+    impuestoConsumo,
+    diferenciaTotal: diferencia,
+    detalleProductos
+  };
+}
+
+function sourceLabel(source) {
+  const src = String(source || '').toLowerCase();
+  if (src.includes('dian')) return 'Parser DIAN';
+  if (src.includes('gemini')) return 'IA Gemini';
+  if (src.includes('groq')) return 'IA Groq';
+  if (src.includes('desconocido')) return 'Sin fuente';
+  return 'IA';
+}
+
+function sourceBadgeHtml(source) {
+  const src = String(source || '').toLowerCase();
+  const style = src.includes('dian')
+    ? 'background:rgba(61,217,178,.12);color:#79f0d0;border:1px solid rgba(61,217,178,.24);'
+    : src.includes('desconocido')
+      ? 'background:rgba(255,255,255,.08);color:#cbd7e5;border:1px solid rgba(255,255,255,.12);'
+      : 'background:rgba(255,179,71,.12);color:#ffd36c;border:1px solid rgba(255,179,71,.24);';
+  return `<span style="display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;font-size:.68rem;font-weight:800;letter-spacing:.04em;${style}">${sourceLabel(source)}</span>`;
+}
+
+function toggleDocDetail(id) {
+  if (expandedDocs.has(id)) expandedDocs.delete(id);
+  else expandedDocs.add(id);
+  loadDocs();
+}
+
+function detailToggleHtml(ed) {
+  const open = expandedDocs.has(ed.documentId);
+  return `<button class="btn btn-s" style="padding:6px 10px;min-width:34px;font-size:1rem;font-weight:900" onclick="toggleDocDetail(${ed.documentId})">${open ? '-' : '+'}</button>`;
+}
+
+function productTableHtml(ed) {
+  const products = Array.isArray(ed?.detalleProductos) ? ed.detalleProductos : [];
+  if (!products.length) {
+    return `<div class="empty-state" style="margin:8px 0 0 0">Fuente: ${sourceLabel(ed?.extractionSource)}. Esta factura no trae detalle de productos extraido.</div>`;
+  }
+  return `
+    <div style="padding:14px 18px 18px 18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px">
+        <div style="font-weight:800;color:#f3c96b">Productos extraidos</div>
+        ${sourceBadgeHtml(ed?.extractionSource)}
+      </div>
+      <div class="table-wrap" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);box-shadow:none">
+        <table>
+          <thead>
+            <tr>
+              <th>Descripcion</th>
+              <th>Cantidad</th>
+              <th>Unidad</th>
+              <th>Vr Unitario</th>
+              <th>Base</th>
+              <th>% IVA</th>
+              <th>IVA</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${products.map((p) => {
+              const cantidad = num(p.cantidad ?? p.qty ?? 0);
+              const unidad = p.unidadMedida || p.unidad || p.um || '-';
+              const valorUnitario = num(p.valorUnitario ?? p.precioUnitario ?? p.unitario ?? 0);
+              const base = num(p.baseImpuesto ?? p.base ?? p.subtotalLinea ?? 0);
+              const porcentaje = num(p.porcentajeIVA ?? p.ivaPorcentaje ?? p.tarifaIVA ?? 0);
+              const iva = num(p.ivaValor ?? p.valorIVA ?? p.iva ?? 0);
+              const total = num(p.totalLinea ?? p.total ?? (base + iva));
+              const descripcion = p.descripcion || p.nombre || p.detalle || p.producto || '-';
+              return `<tr><td>${esc(descripcion)}</td><td>${esc(cantidad || '-')}</td><td>${esc(unidad)}</td><td>${cur(valorUnitario)}</td><td>${cur(base)}</td><td>${esc(porcentaje || 0)}%</td><td>${cur(iva)}</td><td>${cur(total)}</td></tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function buildTotals(items) {
+  const t = { totalFactura: 0, baseExento: 0, base5: 0, iva5: 0, base8: 0, iva8: 0, base19: 0, iva19: 0, reteFuente: 0, reteIva: 0, reteIca: 0, impuestoConsumo: 0, diferenciaTotal: 0 };
+  for (const it of items) {
+    t.totalFactura += it.totalFactura; t.baseExento += it.baseExento; t.base5 += it.base5; t.iva5 += it.iva5;
+    t.base8 += it.base8; t.iva8 += it.iva8; t.base19 += it.base19; t.iva19 += it.iva19;
+    t.reteFuente += it.reteFuente; t.reteIva += it.reteIva; t.reteIca += it.reteIca; t.impuestoConsumo += it.impuestoConsumo; t.diferenciaTotal += it.diferenciaTotal;
+  }
+  return t;
+}
+
+function normalizeProductRow(product = {}) {
+  const cantidad = num(product.cantidad ?? product.qty ?? 0);
+  const unidad = product.unidadMedida || product.unidad || product.um || '-';
+  const valorUnitario = num(product.valorUnitario ?? product.precioUnitario ?? product.unitario ?? 0);
+  const base = num(product.baseImpuesto ?? product.base ?? product.subtotalLinea ?? 0);
+  const porcentaje = num(product.porcentajeIVA ?? product.ivaPorcentaje ?? product.tarifaIVA ?? 0);
+  const iva = num(product.ivaValor ?? product.valorIVA ?? product.iva ?? 0);
+  const total = num(product.totalLinea ?? product.total ?? (base + iva));
+  const descripcion = product.descripcion || product.nombre || product.detalle || product.producto || '-';
+  return { descripcion, cantidad, unidad, valorUnitario, base, porcentaje, iva, total };
+}
+
+function cleanDisplayFileName(name = '') {
+  return String(name || '').replace(/^\d{4}-\d{2}-\d{2}[_\s-]+/, '').trim();
+}
+
+function buildProductTotals(products = []) {
+  return products.reduce((acc, p) => {
+    acc.base += num(p.base);
+    acc.iva += num(p.iva);
+    acc.total += num(p.total);
+    return acc;
+  }, { base: 0, iva: 0, total: 0 });
+}
+
+function kpiCard(label, value) { return `<div class="card"><div class="label">${esc(label)}</div><div class="value">${value}</div></div>`; }
+
+async function loadTeamUsers() { if (!canManage()) return; const d = await api('/api/team/users'); if (d) teamUsers = Array.isArray(d) ? d : []; }
+
+function assignHtml(item, extra = '') {
+  const file = esc(item.original_filename || item.filename || '-');
+  if (!canManage() || teamUsers.length === 0) return file + (extra ? `<div style="margin-top:6px">${extra}</div>` : '');
+  const opts = teamUsers.map((u) => `<option value="${u.id}" ${Number(item.assigned_to) === Number(u.id) ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
+  return `${file}<div style="margin-top:6px"><select class="input-pro" onchange="assignDoc(${item.id}, this.value)">${opts}</select></div>${extra ? `<div style="margin-top:6px">${extra}</div>` : ''}`;
+}
+
+async function loadQueueStatus() {
+  const d = await api('/api/queue/status');
+  if (!d || !Array.isArray(d.counts)) return;
+  const map = Object.fromEntries(d.counts.map((x) => [x.status, Number(x.total || 0)]));
+  const runtime = d.runtime || {};
+  const pending = map.pending || 0;
+  const processing = map.processing || 0;
+  const completed = map.completed || 0;
+  const avgSecondsPerDoc = Number(runtime.maxConcurrent || 1) > 1 ? 14 : 18;
+  const totalActive = pending + processing;
+  const totalBatch = totalActive + completed;
+  let extra = 'Lista';
+  let etaText = totalActive > 0 ? `Tiempo estimado: ${formatEta(totalActive * avgSecondsPerDoc)} para ${totalActive} documento(s).` : 'Sin carga activa.';
+  let etaPercent = totalBatch > 0 ? (completed / totalBatch) * 100 : 0;
+  let etaMeta = totalBatch > 0 ? `${completed}/${totalBatch} procesadas` : '0%';
+  if (runtime.paused && runtime.pauseUntil) {
+    const secs = Math.max(1, Math.ceil((Number(runtime.pauseUntil) - Date.now()) / 1000));
+    extra = `Pausada por rate limit, reintenta en ${secs}s`;
+    etaText = totalActive > 0 ? `Pausa activa por rate limit. Reanuda en ${secs}s y luego tardaria aprox ${formatEta(totalActive * avgSecondsPerDoc)}.` : `Pausa activa por rate limit. Reintenta en ${secs}s.`;
+    etaMeta = totalBatch > 0 ? `${completed}/${totalBatch} procesadas · pausa ${secs}s` : `Pausa ${secs}s`;
+  } else if (runtime.isRunning) {
+    extra = 'Procesando una a una';
+  }
+  setQueueStatus(`Cola | pending: ${pending} | processing: ${processing} | error: ${map.error || 0} | completed: ${map.completed || 0} | ${extra}`, totalActive + (map.error || 0) > 0 || runtime.paused);
+  setEtaStatus(etaText, false);
+  setEtaProgress(etaPercent, etaMeta);
+}
+
+async function loadDocs() {
+  await loadTeamUsers();
+  await loadQueueStatus();
+  const scope = canManage() ? document.getElementById('scope').value : 'mine';
+  const d = await api('/api/data?scope=' + encodeURIComponent(scope));
+  if (!d) return;
+  docs = Array.isArray(d) ? d : [];
+  setSessionStatus(`Sesion: ${me.email} | Empresa ${me.company_id} | Vista ${scope} | Registros ${docs.length} | Actualizado ${new Date().toLocaleTimeString()}`);
+
+  const completed = [];
+  let err = 0, pend = 0;
+  for (const item of docs) {
+    if (item.status === 'error') err += 1;
+    if (item.status === 'pending' || item.status === 'processing') pend += 1;
+    if (item.status === 'completed') {
+      const parsed = parseExtraction(item);
+      if (parsed) completed.push(parsed);
+    }
+  }
+  const totals = buildTotals(completed);
+  const noCuadran = completed.filter((x) => Math.abs(x.diferenciaTotal) > 1).length;
+
+  document.getElementById('kpis').innerHTML = [
+    kpiCard('Documentos', docs.length),
+    kpiCard('Completados', completed.length),
+    kpiCard('Pendientes', pend),
+    kpiCard('Errores', err),
+    kpiCard('Total Factura', cur(totals.totalFactura)),
+    kpiCard('Base Exento', cur(totals.baseExento)),
+    kpiCard('Base IVA 5', cur(totals.base5)),
+    kpiCard('IVA 5', cur(totals.iva5)),
+    kpiCard('Base IVA 8', cur(totals.base8)),
+    kpiCard('IVA 8', cur(totals.iva8)),
+    kpiCard('Base IVA 19', cur(totals.base19)),
+    kpiCard('IVA 19', cur(totals.iva19)),
+    kpiCard('ReteFuente', cur(totals.reteFuente)),
+    kpiCard('ReteIVA', cur(totals.reteIva)),
+    kpiCard('ReteICA', cur(totals.reteIca)),
+    kpiCard('Imp Consumo', cur(totals.impuestoConsumo)),
+    kpiCard('Dif Neta', cur(totals.diferenciaTotal)),
+    kpiCard('No Cuadran', noCuadran)
+  ].join('');
+
+  document.getElementById('docs').innerHTML = docs.map((x) => {
+    const date = esc(new Date(x.created_at).toLocaleDateString());
+    if (x.status === 'completed') {
+      const ed = parseExtraction(x);
+      if (!ed) return `<tr><td></td><td>${esc(x.status)}</td><td>-</td><td>${date}</td><td colspan="15">Error de formato en JSON</td><td>${assignHtml(x)}</td></tr>`;
+      const detailRow = expandedDocs.has(ed.documentId) ? `<tr><td colspan="20" style="padding:0">${productTableHtml(ed)}</td></tr>` : '';
+      return `<tr><td>${detailToggleHtml(ed)}</td><td>${esc(x.status)}</td><td>${sourceBadgeHtml(ed.extractionSource)}</td><td>${date}</td><td>${esc(ed.nit || '-')}</td><td>${esc(ed.factura || '-')}</td><td>${cur(ed.totalFactura)}</td><td>${cur(ed.baseExento)}</td><td>${cur(ed.base5)}</td><td>${cur(ed.iva5)}</td><td>${cur(ed.base8)}</td><td>${cur(ed.iva8)}</td><td>${cur(ed.base19)}</td><td>${cur(ed.iva19)}</td><td>${cur(ed.reteFuente)}</td><td>${cur(ed.reteIva)}</td><td>${cur(ed.reteIca)}</td><td>${cur(ed.impuestoConsumo)}</td><td>${cur(ed.diferenciaTotal)}</td><td>${assignHtml(x)}</td></tr>${detailRow}`;
+    }
+    if (x.status === 'error') {
+      return `<tr><td></td><td>error</td><td>-</td><td>${date}</td><td colspan="15">${esc(x.error_message || 'Desconocido')}</td><td>${assignHtml(x, `<button class="btn btn-s" onclick="retryDoc(${x.id})">Reenviar (${Number(x.retry_count || 0)}/${Number(x.max_retries || 3)})</button>`)}</td></tr>`;
+    }
+    return `<tr><td></td><td>${esc(x.status)}</td><td>-</td><td>${date}</td><td colspan="15">Procesando...</td><td>${assignHtml(x)}</td></tr>`;
+  }).join('');
+}
+
+async function retryDoc(id) { const r = await api('/api/documents/' + id + '/retry', { method: 'POST' }); if (r?.ok) { alert(r.message); loadDocs(); } }
+async function retryFailed() { const r = await api('/api/documents/retry-failed', { method: 'POST' }); if (r?.ok) { alert(r.message); loadDocs(); } }
+async function reprocessCompleted() { if (!confirm('Reprocesar todos los documentos completados visibles en esta empresa?')) return; const r = await api('/api/documents/reprocess-completed', { method: 'POST' }); if (r?.ok) { alert(r.message); loadDocs(); } else if (r?.error) alert(r.error); }
+async function clearQueue() { if (!confirm('Vaciar la cola pendiente/procesando/error sin tocar completados?')) return; const r = await api('/api/queue', { method: 'DELETE' }); if (r?.ok) { alert(r.message); loadDocs(); } else if (r?.error) alert(r.error); }
+async function cleanup() { if (!confirm('Limpiar historial?')) return; const r = await api('/api/cleanup', { method: 'DELETE' }); if (r?.ok) { alert(r.message); loadDocs(); } }
+async function assignDoc(id, userId) { const r = await api('/api/documents/' + id + '/assign', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assigned_to: Number(userId) }) }); if (r?.ok) loadDocs(); }
+
+async function loadTeam() {
+  const d = await api('/api/team/users');
+  if (!d) return;
+  teamUsers = Array.isArray(d) ? d : [];
+  document.getElementById('team').innerHTML = teamUsers.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td><select class="input-pro" onchange="updateUser(${u.id}, this.value, null)"><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option><option value="user" ${u.role === 'user' ? 'selected' : ''}>Operador</option><option value="viewer" ${u.role === 'viewer' ? 'selected' : ''}>Solo lectura</option></select></td><td>${u.active ? 'SI' : 'NO'}</td><td><div class="stack"><button class="btn btn-s" onclick="toggleUser(${u.id}, ${u.active ? 'false' : 'true'})">${u.active ? 'Desactivar' : 'Activar'}</button><button class="btn btn-s" onclick="resetUserPassword(${u.id})">Reset clave</button></div></td></tr>`).join('');
+}
+
+async function createUser() {
+  const r = await api('/api/team/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: document.getElementById('team-name').value, email: document.getElementById('team-email').value, password: document.getElementById('team-password').value, role: document.getElementById('team-role').value }) });
+  if (r?.ok) {
+    document.getElementById('team-name').value = '';
+    document.getElementById('team-email').value = '';
+    document.getElementById('team-password').value = '';
+    loadTeam();
+    loadDocs();
+  } else if (r?.error) alert(r.error);
+}
+
+async function updateUser(id, role, active) {
+  const body = {};
+  if (role !== null) body.role = role;
+  if (active !== null) body.active = active;
+  const r = await api('/api/team/users/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (r?.ok) { loadTeam(); loadDocs(); } else if (r?.error) alert(r.error);
+}
+
+async function toggleUser(id, active) { await updateUser(id, null, active); }
+async function resetUserPassword(id) { const newPassword = prompt('Nueva clave temporal para el usuario'); if (!newPassword) return; const r = await api('/api/team/users/' + id + '/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ new_password: newPassword }) }); alert(r?.message || r?.error || 'Proceso completado'); }
+async function changePassword() { const r = await api('/api/auth/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: document.getElementById('current-password').value, new_password: document.getElementById('new-password').value }) }); if (r?.ok) { alert(r.message); document.getElementById('current-password').value = ''; document.getElementById('new-password').value = ''; location.reload(); } else if (r?.error) alert(r.error); }
+async function loadAudit() { const d = await api('/api/audit'); if (!d) return; document.getElementById('audit').innerHTML = d.map((x) => `<tr><td>${esc(new Date(x.created_at).toLocaleString())}</td><td>${esc(x.actor_name || '-')}</td><td>${esc(x.action)}</td><td>${esc(x.target_type || '-')} ${esc(x.target_id || '')}</td><td>${esc(JSON.stringify(x.detail_json || {}))}</td></tr>`).join(''); }
+
+async function exportExcel() {
+  if (docs.length === 0) return alert('Nada que exportar');
+  try {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Reporte');
+    ws.properties.outlineLevelRow = 1;
+    ws.views = [{ state: 'frozen', ySplit: 2 }];
+    ws.columns = [
+      { header: 'Nivel', key: 'nivel', width: 10 },
+      { header: 'Fecha', key: 'fecha', width: 12 },
+      { header: 'Factura', key: 'factura', width: 20 },
+      { header: 'NIT', key: 'nit', width: 18 },
+      { header: 'Tipo Registro', key: 'tipoRegistro', width: 14 },
+      { header: 'Descripcion', key: 'descripcion', width: 34 },
+      { header: 'Cantidad', key: 'cantidad', width: 12 },
+      { header: 'Unidad', key: 'unidad', width: 12 },
+      { header: 'Vr Unitario', key: 'valorUnitario', width: 16 },
+      { header: 'Total Factura', key: 'totalFactura', width: 16 },
+      { header: 'Base Exento', key: 'baseExento', width: 14 },
+      { header: 'Base IVA 5', key: 'base5', width: 14 },
+      { header: 'IVA 5', key: 'iva5', width: 14 },
+      { header: 'Base IVA 8', key: 'base8', width: 14 },
+      { header: 'IVA 8', key: 'iva8', width: 14 },
+      { header: 'Base IVA 19', key: 'base19', width: 14 },
+      { header: 'IVA 19', key: 'iva19', width: 14 },
+      { header: 'ReteFuente', key: 'reteFuente', width: 14 },
+      { header: 'ReteIVA', key: 'reteIva', width: 14 },
+      { header: 'ReteICA', key: 'reteIca', width: 14 },
+      { header: 'Imp Consumo', key: 'impuestoConsumo', width: 14 },
+      { header: 'Diferencia', key: 'diferenciaTotal', width: 14 },
+      { header: 'Base Producto', key: 'baseProducto', width: 16 },
+      { header: '% IVA Producto', key: 'porcentajeIvaProducto', width: 16 },
+      { header: 'IVA Producto', key: 'ivaProducto', width: 16 },
+      { header: 'Total Producto', key: 'totalProducto', width: 16 }
+    ];
+    ws.insertRow(1, {
+      nivel: 'GUIA',
+      fecha: 'Usa el simbolo +/- del margen izquierdo para expandir o contraer los productos por factura.'
+    });
+    ws.mergeCells(1, 2, 1, ws.columns.length);
+    ws.getCell('A1').font = { bold: true, color: { argb: 'FFFFD36C' } };
+    ws.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF16212B' } };
+    ws.getCell('B1').font = { italic: true, bold: true, color: { argb: 'FFF7FBFF' } };
+    ws.getCell('B1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF16212B' } };
+    ws.getRow(2).font = { bold: true };
+    ws.getRow(2).height = 22;
+    ws.autoFilter = {
+      from: { row: 2, column: 1 },
+      to: { row: 2, column: ws.columns.length }
+    };
+    ws.getColumn('A').alignment = { horizontal: 'center' };
+    ws.getColumn('E').alignment = { horizontal: 'center' };
+
+    const completed = docs.filter((x) => x.status === 'completed' && x.extracted_data);
+    const reportTotals = {
+      totalFactura: 0,
+      baseExento: 0,
+      base5: 0,
+      iva5: 0,
+      base8: 0,
+      iva8: 0,
+      base19: 0,
+      iva19: 0,
+      reteFuente: 0,
+      reteIva: 0,
+      reteIca: 0,
+      impuestoConsumo: 0,
+      diferenciaTotal: 0,
+      baseProducto: 0,
+      ivaProducto: 0,
+      totalProducto: 0
+    };
+
+    completed.forEach((x) => {
+      const ed = parseExtraction(x);
+      if (!ed) return;
+      const products = Array.isArray(ed.detalleProductos) ? ed.detalleProductos.map(normalizeProductRow) : [];
+      const productTotals = buildProductTotals(products);
+
+      const invoiceRow = ws.addRow({
+        nivel: 'F',
+        fecha: new Date(x.created_at).toLocaleDateString(),
+        factura: ed.factura,
+        nit: ed.nit,
+        tipoRegistro: 'FACTURA',
+        descripcion: cleanDisplayFileName(x.original_filename || x.filename || ''),
+        totalFactura: ed.totalFactura,
+        baseExento: ed.baseExento,
+        base5: ed.base5,
+        iva5: ed.iva5,
+        base8: ed.base8,
+        iva8: ed.iva8,
+        base19: ed.base19,
+        iva19: ed.iva19,
+        reteFuente: ed.reteFuente,
+        reteIva: ed.reteIva,
+        reteIca: ed.reteIca,
+        impuestoConsumo: ed.impuestoConsumo,
+        diferenciaTotal: ed.diferenciaTotal,
+        baseProducto: productTotals.base,
+        ivaProducto: productTotals.iva,
+        totalProducto: productTotals.total
+      });
+      invoiceRow.font = { bold: true };
+      invoiceRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1C2A36' } };
+      invoiceRow.height = 22;
+      invoiceRow.getCell(1).font = { bold: true, color: { argb: 'FFFFD36C' } };
+      invoiceRow.eachCell((cell) => {
+        cell.font = { ...(cell.font || {}), color: { argb: 'FFF7FBFF' }, bold: true };
+        cell.border = {
+          top: { style: 'thin', color: { argb: '33FFD36C' } },
+          bottom: { style: 'thin', color: { argb: '33FFD36C' } }
+        };
+      });
+
+      reportTotals.totalFactura += ed.totalFactura;
+      reportTotals.baseExento += ed.baseExento;
+      reportTotals.base5 += ed.base5;
+      reportTotals.iva5 += ed.iva5;
+      reportTotals.base8 += ed.base8;
+      reportTotals.iva8 += ed.iva8;
+      reportTotals.base19 += ed.base19;
+      reportTotals.iva19 += ed.iva19;
+      reportTotals.reteFuente += ed.reteFuente;
+      reportTotals.reteIva += ed.reteIva;
+      reportTotals.reteIca += ed.reteIca;
+      reportTotals.impuestoConsumo += ed.impuestoConsumo;
+      reportTotals.diferenciaTotal += ed.diferenciaTotal;
+      reportTotals.baseProducto += productTotals.base;
+      reportTotals.ivaProducto += productTotals.iva;
+      reportTotals.totalProducto += productTotals.total;
+
+      products.forEach((product) => {
+        const detailRow = ws.addRow({
+          nivel: 'P',
+          fecha: new Date(x.created_at).toLocaleDateString(),
+          factura: ed.factura,
+          nit: ed.nit,
+          tipoRegistro: 'PRODUCTO',
+          descripcion: product.descripcion,
+          cantidad: product.cantidad,
+          unidad: product.unidad,
+          valorUnitario: product.valorUnitario,
+          baseProducto: product.base,
+          porcentajeIvaProducto: product.porcentaje,
+          ivaProducto: product.iva,
+          totalProducto: product.total
+        });
+        detailRow.outlineLevel = 1;
+        detailRow.hidden = true;
+        detailRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FBFE' } };
+        detailRow.getCell(1).font = { color: { argb: 'FF5B7288' }, bold: true };
+        detailRow.getCell(5).font = { color: { argb: 'FF5B7288' }, bold: true };
+        detailRow.eachCell((cell) => {
+          cell.border = {
+            bottom: { style: 'thin', color: { argb: '11000000' } }
+          };
+        });
+      });
+    });
+
+    const totalRow = ws.addRow({
+      nivel: 'T',
+      factura: 'TOTALES',
+      tipoRegistro: 'RESUMEN',
+      totalFactura: reportTotals.totalFactura,
+      baseExento: reportTotals.baseExento,
+      base5: reportTotals.base5,
+      iva5: reportTotals.iva5,
+      base8: reportTotals.base8,
+      iva8: reportTotals.iva8,
+      base19: reportTotals.base19,
+      iva19: reportTotals.iva19,
+      reteFuente: reportTotals.reteFuente,
+      reteIva: reportTotals.reteIva,
+      reteIca: reportTotals.reteIca,
+      impuestoConsumo: reportTotals.impuestoConsumo,
+      diferenciaTotal: reportTotals.diferenciaTotal,
+      baseProducto: reportTotals.baseProducto,
+      ivaProducto: reportTotals.ivaProducto,
+      totalProducto: reportTotals.totalProducto
+    });
+    totalRow.font = { bold: true };
+    totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF16212B' } };
+    totalRow.height = 22;
+    totalRow.eachCell((cell) => {
+      cell.font = { ...(cell.font || {}), color: { argb: 'FFFFD36C' }, bold: true };
+    });
+
+    ['I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','Y','Z'].forEach((col) => {
+      ws.getColumn(col).numFmt = '"$"#,##0.00;-"$"#,##0.00';
+    });
+    ws.getColumn('X').numFmt = '0.00';
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const a = document.createElement('a');
+    const downloadUrl = URL.createObjectURL(blob);
+    a.href = downloadUrl;
+    a.download = 'Reporte_Detallado.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    return;
+  } catch (err) {
+    console.warn('Fallo export local XLSX, usando backend:', err);
+  }
+
+  const scope = canManage() ? document.getElementById('scope').value : 'mine';
+  const url = '/api/export/excel?scope=' + encodeURIComponent(scope);
+  const res = await fetch(url, { credentials: 'same-origin' });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || ('HTTP ' + res.status));
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename*=UTF-8''([^;]+)|filename="?([^"]+)"?/i);
+  const rawName = match ? decodeURIComponent(match[1] || match[2] || 'reporte_facturas.xls') : 'reporte_facturas.xls';
+  const downloadUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = rawName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+}
+
+async function upload(files, useRelative) {
+  if (!files || files.length === 0) return;
+  try {
+    const estimatedSeconds = files.length * 18;
+    setUploadStatus(`Subiendo ${files.length} archivo(s)... Estimado inicial: ${formatEta(estimatedSeconds)}.`);
+    setEtaStatus(`Carga preparada para ${files.length} documento(s). Tiempo base aproximado ${formatEta(estimatedSeconds)}.`);
+    setEtaProgress(0, `0/${files.length} procesadas`);
+    const fd = new FormData();
+    const paths = [];
+    for (const file of files) {
+      fd.append('pdfs', file);
+      paths.push(useRelative ? (file.webkitRelativePath || file.name) : file.name);
+    }
+    fd.append('relative_paths', JSON.stringify(paths));
+    fd.append('max_retries', '3');
+    const r = await api('/api/upload', { method: 'POST', body: fd });
+    if (!r) { setUploadStatus('La sesion se invalido durante la carga.', true); return; }
+    if (r.error) { setUploadStatus(r.error, true); alert(r.error); return; }
+    setUploadStatus(`Carga enviada a la cola correctamente. Lote: ${files.length} archivo(s).`);
+    await loadDocs();
+  } catch (err) {
+    const message = err?.message || 'La carga fallo antes de llegar al servidor.';
+    setUploadStatus(message, true);
+    alert(message);
+  }
+}
+
+document.getElementById('fi').onchange = async (e) => { await upload(e.target.files, false); e.target.value = ''; };
+document.getElementById('folder').onchange = async (e) => { await upload(e.target.files, true); e.target.value = ''; };
+
+async function handleResetFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('reset_token');
+  if (!token) return;
+  const password = prompt('Nueva clave para recuperar el acceso');
+  if (!password) return;
+  const rr = await req('/api/auth/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, password }) });
+  alert(rr.data.message || rr.data.error || 'Proceso completado');
+  params.delete('reset_token');
+  history.replaceState({}, '', `${location.pathname}${params.toString() ? `?${params.toString()}` : ''}`);
+}
+
+async function init() {
+  await handleResetFromUrl();
+  const r = await req('/api/auth/me');
+  if (!r.ok) { renderShell(); return; }
+  me = r.data.user;
+  if (canManage()) document.getElementById('scope').value = 'all';
+  renderShell();
+  if (canManage()) await loadTeamUsers();
+  startDocsAutoRefresh();
+  setView('main');
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contador SaaS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <style>
+        :root { --bg:#050508; --side:#0a0a0f; --card:#12121a; --accent:#7c3aed; --accent-glow:rgba(124,58,237,0.3); --text:#f1f5f9; --text-s:#94a3b8; --border:rgba(255,255,255,0.06); --succ:#10b981; --err:#ef4444; --warn:#f59e0b; }
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Plus Jakarta Sans',sans-serif; }
+        body { background:var(--bg); color:var(--text); display:flex; min-height:100vh; overflow-x:hidden; }
+        aside { width:260px; background:var(--side); border-right:1px solid var(--border); padding:2rem; position:fixed; height:100vh; display:flex; flex-direction:column; z-index:1000; }
+        .logo { font-size:1.4rem; font-weight:800; color:#fff; margin-bottom:3rem; }
+        .nav-item { padding:0.8rem 1rem; border-radius:12px; cursor:pointer; color:var(--text-s); font-weight:600; transition:0.2s; margin-bottom:5px; }
+        .nav-item:hover { background:rgba(255,255,255,0.04); color:#fff; }
+        .nav-group { font-size:0.65rem; font-weight:800; color:var(--text-s); margin:2rem 0 0.8rem 0.5rem; text-transform:uppercase; letter-spacing:1px; }
+        main { flex-grow:1; margin-left:260px; padding:3rem; width:calc(100% - 260px); }
+        .view { display:none; }
+        .view.active { display:block; }
+        .table-wrap { width:100%; overflow-x:auto; background:var(--card); border-radius:24px; border:1px solid var(--border); }
+        table { width:100%; border-collapse:collapse; font-size:0.7rem; }
+        th { padding:1rem 0.5rem; text-align:left; color:var(--text-s); font-weight:700; border-bottom:1px solid var(--border); text-transform:uppercase; }
+        td { padding:0.8rem 0.5rem; border-bottom:1px solid var(--border); vertical-align:top; }
+        .input-pro { background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:10px; padding:0.6rem 0.8rem; color:#fff; font-size:0.8rem; width:100%; outline:none; }
+        .btn-pro { padding:0.7rem 1rem; border-radius:12px; border:none; cursor:pointer; font-weight:700; font-size:0.85rem; transition:0.2s; color:#fff; }
+        .btn-p { background:var(--accent); }
+        .btn-s { background:rgba(255,255,255,0.05); border:1px solid var(--border); }
+        .st-tag { padding:4px 10px; border-radius:8px; font-weight:800; font-size:0.55rem; }
+        #auth-lay { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; }
+        .auth-box { background:var(--side); border:1px solid var(--border); padding:2.5rem 3rem; border-radius:28px; width:440px; }
+        header { margin-bottom:2rem; display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; }
+        .kpi-row { display:grid; grid-template-columns:repeat(5,1fr); gap:0.8rem; margin-bottom:1rem; }
+        .kpi-card { background:var(--card); border:1px solid var(--border); padding:0.8rem; border-radius:16px; text-align:center; }
+        .kpi-label { font-size:0.6rem; font-weight:700; color:var(--text-s); text-transform:uppercase; margin-bottom:4px; }
+        .kpi-val { font-size:1rem; font-weight:800; }
+        .stack { display:flex; gap:10px; flex-wrap:wrap; }
+    </style>
+</head>
+<body>
+    <div id="auth-lay">
+        <div class="auth-box">
+            <div id="auth-log">
+                <h2 style="font-size:2rem; margin-bottom:2rem;">Contador SaaS</h2>
+                <input type="email" id="l-email" placeholder="Email" class="input-pro" style="margin-bottom:1rem">
+                <input type="password" id="l-pwd" placeholder="Clave" class="input-pro" style="margin-bottom:1rem">
+                <button class="btn-pro btn-p" style="width:100%" onclick="login()">Ingresar</button>
+                <p style="margin-top:1rem; cursor:pointer; color:var(--text-s)" onclick="toggleAuth(true)">Registrar empresa</p>
+            </div>
+            <div id="auth-reg" style="display:none">
+                <h2 style="font-size:2rem; margin-bottom:2rem;">Nueva Empresa</h2>
+                <input type="text" id="r-comp" placeholder="Empresa" class="input-pro" style="margin-bottom:0.8rem">
+                <input type="text" id="r-name" placeholder="Nombre" class="input-pro" style="margin-bottom:0.8rem">
+                <input type="email" id="r-email" placeholder="Email" class="input-pro" style="margin-bottom:0.8rem">
+                <input type="password" id="r-pwd" placeholder="Clave" class="input-pro" style="margin-bottom:1rem">
+                <button class="btn-pro btn-p" style="width:100%" onclick="register()">Crear</button>
+                <p style="margin-top:1rem; cursor:pointer; color:var(--text-s)" onclick="toggleAuth(false)">Volver</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-lay" style="display:none; width:100%">
+        <aside>
+            <div class="logo">Contador</div>
+            <div class="nav-group">Workspace</div>
+            <div class="nav-item" onclick="setView('main')">Inbox</div>
+            <div id="company-nav" style="display:none">
+                <div class="nav-group">Empresa</div>
+                <div class="nav-item" onclick="setView('team')">Equipo</div>
+                <div class="nav-item" onclick="setView('audit')">Auditoria</div>
+            </div>
+            <div id="saas-nav" style="display:none">
+                <div class="nav-group">Master</div>
+                <div class="nav-item" onclick="setView('clients')">Clientes</div>
+            </div>
+            <div style="margin-top:auto">
+                <p id="usr-n" style="font-weight:800"></p>
+                <button class="btn-pro btn-s" style="width:100%; margin-top:1rem" onclick="logout()">Cerrar Sesion</button>
+            </div>
+        </aside>
+
+        <main>
+            <div id="v-main" class="view active">
+                <header>
+                    <div>
+                        <h1>Consola</h1>
+                        <p style="color:var(--text-s)">Documentos asignados y cola de trabajo.</p>
+                    </div>
+                    <div class="stack">
+                        <select id="scope-filter" class="input-pro" style="width:170px" onchange="loadMain()">
+                            <option value="mine">Mis documentos</option>
+                            <option value="all">Toda la empresa</option>
+                        </select>
+                        <button class="btn-pro btn-s" onclick="retryFailedDocuments()">Reenviar fallidos</button>
+                        <button class="btn-pro btn-s" onclick="cleanupHistory()">Limpiar</button>
+                        <button class="btn-pro btn-s" onclick="exportToExcel()">Excel</button>
+                        <input type="file" id="fi" multiple accept=".pdf" style="display:none">
+                        <input type="file" id="folder-input" multiple accept=".pdf" webkitdirectory directory style="display:none">
+                        <button class="btn-pro btn-s" onclick="document.getElementById('folder-input').click()">Carpeta</button>
+                        <button class="btn-pro btn-p" onclick="document.getElementById('fi').click()">PDFs</button>
+                    </div>
+                </header>
+                <div class="kpi-row" id="row-kpis-1"></div>
+                <div class="kpi-row" id="row-kpis-2"></div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr><th>Estado</th><th>Fecha</th><th>NIT</th><th>Factura</th><th>Base 19</th><th>IVA 19</th><th>Base 5</th><th>IVA 5</th><th>Base 0</th><th>RT Fte</th><th>RT ICA</th><th>RT IVA</th><th>Total</th><th>Archivo / Accion</th></tr>
+                        </thead>
+                        <tbody id="m-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="v-team" class="view">
+                <header>
+                    <h1>Equipo</h1>
+                    <div class="stack">
+                        <input type="text" id="team-name" class="input-pro" placeholder="Nombre" style="width:160px">
+                        <input type="email" id="team-email" class="input-pro" placeholder="Email" style="width:220px">
+                        <input type="password" id="team-password" class="input-pro" placeholder="Clave temporal" style="width:180px">
+                        <select id="team-role" class="input-pro" style="width:140px">
+                            <option value="user">Operador</option>
+                            <option value="viewer">Solo lectura</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                        <button class="btn-pro btn-p" onclick="createTeamUser()">Agregar</button>
+                    </div>
+                </header>
+                <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Activo</th><th>Accion</th></tr></thead><tbody id="team-tbody"></tbody></table></div>
+            </div>
+
+            <div id="v-audit" class="view">
+                <header><h1>Auditoria</h1></header>
+                <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Actor</th><th>Accion</th><th>Objeto</th><th>Detalle</th></tr></thead><tbody id="audit-tbody"></tbody></table></div>
+            </div>
+
+            <div id="v-clients" class="view">
+                <header><h1>Clientes</h1></header>
+                <div id="client-list"></div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let me = null, isPolling = false, currentData = [], teamUsers = [];
+        const cur = value => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value || 0);
+        const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+        async function requestJson(url, options = {}) {
+            const response = await fetch(url, { ...options, credentials: 'same-origin', headers: { ...(options.headers || {}) } });
+            const text = await response.text();
+            let data = {};
+            try { data = text ? JSON.parse(text) : {}; } catch (_) {}
+            return { ok: response.ok, status: response.status, data };
+        }
+        function canManageCompany() { return !!me && (me.role === 'admin' || me.is_superadmin); }
+        function actionButton(label, onclick) { return `<button class="btn-pro btn-s" style="padding:0.45rem 0.7rem;font-size:0.75rem" onclick="${onclick}">${label}</button>`; }
+
+        async function api(url, options = {}) {
+            const result = await requestJson(url, options);
+            if (result.status === 402) { alert(result.data.error || 'Suscripcion vencida.'); await logout(); return null; }
+            if ((result.status === 401 || result.status === 403) && url !== '/api/auth/me') { await logout(); return null; }
+            return result.data;
+        }
+        async function login() {
+            const result = await requestJson('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: document.getElementById('l-email').value, password: document.getElementById('l-pwd').value }) });
+            if (!result.ok) return alert(result.data.error || 'No se pudo iniciar sesion.');
+            me = result.data.user; await init();
+        }
+        async function register() {
+            const result = await requestJson('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company_name: document.getElementById('r-comp').value, name: document.getElementById('r-name').value, email: document.getElementById('r-email').value, password: document.getElementById('r-pwd').value }) });
+            if (!result.ok) return alert(result.data.error || 'No se pudo registrar la cuenta.');
+            me = result.data.user; await init();
+        }
+        async function logout() { await requestJson('/api/auth/logout', { method: 'POST' }); me = null; location.reload(); }
+        function toggleAuth(registerMode) { document.getElementById('auth-log').style.display = registerMode ? 'none' : 'block'; document.getElementById('auth-reg').style.display = registerMode ? 'block' : 'none'; }
+        function renderShell() {
+            document.getElementById('auth-lay').style.display = me ? 'none' : 'flex';
+            document.getElementById('app-lay').style.display = me ? 'block' : 'none';
+            document.getElementById('usr-n').innerText = me ? me.name : '';
+            document.getElementById('company-nav').style.display = canManageCompany() ? 'block' : 'none';
+            document.getElementById('saas-nav').style.display = me && me.is_superadmin ? 'block' : 'none';
+            document.getElementById('scope-filter').style.display = canManageCompany() ? 'block' : 'none';
+        }
+        function setView(view) {
+            document.querySelectorAll('.view').forEach(node => node.classList.remove('active'));
+            document.getElementById(`v-${view}`).classList.add('active');
+            if (view === 'main') loadMain();
+            if (view === 'team') loadTeam();
+            if (view === 'audit') loadAudit();
+            if (view === 'clients') loadClients();
+        }
+        async function ensureTeamUsers() { if (!canManageCompany()) return; const data = await api('/api/team/users'); if (data) teamUsers = Array.isArray(data) ? data : []; }
+        function renderAssignment(item, extra = '') {
+            const fileLabel = esc(item.original_filename || item.filename || '-');
+            if (!canManageCompany() || teamUsers.length === 0) return `${fileLabel}${extra ? `<div style="margin-top:6px">${extra}</div>` : ''}`;
+            const options = teamUsers.map(user => `<option value="${user.id}" ${Number(item.assigned_to) === Number(user.id) ? 'selected' : ''}>${esc(user.name)}</option>`).join('');
+            return `${fileLabel}<div style="margin-top:6px"><select class="input-pro" style="min-width:150px" onchange="assignDocument(${item.id}, this.value)">${options}</select></div>${extra ? `<div style="margin-top:6px">${extra}</div>` : ''}`;
+        }
+        async function loadMain() {
+            await ensureTeamUsers();
+            const scope = canManageCompany() ? document.getElementById('scope-filter').value : 'mine';
+            const data = await api(`/api/data?scope=${encodeURIComponent(scope)}`);
+            if (!data) return;
+            currentData = Array.isArray(data) ? data : [];
+            let b19=0,v19=0,b5=0,v5=0,b0=0,rf=0,ri=0,rv=0,st=0,tot=0,pending=0;
+            currentData.forEach(item => {
+                if (item.status === 'completed' && item.extracted_data) {
+                    try {
+                        const ed = typeof item.extracted_data === 'string' ? JSON.parse(item.extracted_data) : item.extracted_data;
+                        const ivs = ed.ivasDiscriminados || [];
+                        const i19 = ivs.find(x => x.porcentaje === 19) || { base:0, valor:0 };
+                        const i5 = ivs.find(x => x.porcentaje === 5) || { base:0, valor:0 };
+                        const i0 = ivs.find(x => x.porcentaje === 0) || { base:0, valor:0 };
+                        b19 += Number(i19.base||0); v19 += Number(i19.valor||0); b5 += Number(i5.base||0); v5 += Number(i5.valor||0); b0 += Number(i0.base||0);
+                        rf += Number(ed.reteFuente||0); ri += Number(ed.reteIca||0); rv += Number(ed.reteIva||0); st += Number(ed.subtotal||0); tot += Number(ed.total||0);
+                    } catch (_) {}
+                } else if (item.status === 'pending' || item.status === 'processing') pending += 1;
+            });
+            if (pending > 0 && !isPolling) startPolling(); if (pending === 0) isPolling = false;
+            document.getElementById('row-kpis-1').innerHTML = `<div class="kpi-card"><div class="kpi-label">Subtotal</div><div class="kpi-val">${cur(st)}</div></div><div class="kpi-card"><div class="kpi-label">Base 19</div><div class="kpi-val">${cur(b19)}</div></div><div class="kpi-card"><div class="kpi-label">IVA 19</div><div class="kpi-val">${cur(v19)}</div></div><div class="kpi-card"><div class="kpi-label">Base 5</div><div class="kpi-val">${cur(b5)}</div></div><div class="kpi-card"><div class="kpi-label">IVA 5</div><div class="kpi-val">${cur(v5)}</div></div>`;
+            document.getElementById('row-kpis-2').innerHTML = `<div class="kpi-card"><div class="kpi-label">Base 0</div><div class="kpi-val">${cur(b0)}</div></div><div class="kpi-card"><div class="kpi-label">ReteFuente</div><div class="kpi-val">${cur(rf)}</div></div><div class="kpi-card"><div class="kpi-label">ReteICA</div><div class="kpi-val">${cur(ri)}</div></div><div class="kpi-card"><div class="kpi-label">ReteIVA</div><div class="kpi-val">${cur(rv)}</div></div><div class="kpi-card"><div class="kpi-label">Total</div><div class="kpi-val">${cur(tot)}</div></div>`;
+            document.getElementById('m-tbody').innerHTML = currentData.map(item => {
+                if (item.status === 'completed' && item.extracted_data) {
+                    try {
+                        const ed = typeof item.extracted_data === 'string' ? JSON.parse(item.extracted_data) : item.extracted_data;
+                        const ivs = ed.ivasDiscriminados || [];
+                        const i19 = ivs.find(x => x.porcentaje === 19) || { base:0, valor:0 };
+                        const i5 = ivs.find(x => x.porcentaje === 5) || { base:0, valor:0 };
+                        const i0 = ivs.find(x => x.porcentaje === 0) || { base:0, valor:0 };
+                        return `<tr><td><span class="st-tag" style="background:rgba(16,185,129,0.1);color:var(--succ)">LISTO</span></td><td>${esc(new Date(item.created_at).toLocaleDateString())}</td><td>${esc(ed.nitEmisor||'-')}</td><td>${esc(ed.numeroFactura||'-')}</td><td>${cur(i19.base)}</td><td>${cur(i19.valor)}</td><td>${cur(i5.base)}</td><td>${cur(i5.valor)}</td><td>${cur(i0.base)}</td><td>${cur(ed.reteFuente)}</td><td>${cur(ed.reteIca)}</td><td>${cur(ed.reteIva)}</td><td>${cur(ed.total)}</td><td>${renderAssignment(item)}</td></tr>`;
+                    } catch (_) { return '<tr><td colspan="14">Error de formato</td></tr>'; }
+                }
+                if (item.status === 'error') return `<tr><td><span class="st-tag" style="background:rgba(239,68,68,0.1);color:var(--err)">ERROR</span></td><td colspan="12">${esc(item.error_message || 'Desconocido')}</td><td>${renderAssignment(item, actionButton(`Reenviar (${Number(item.retry_count||0)}/${Number(item.max_retries||3)})`, `retryDocument(${item.id})`))}</td></tr>`;
+                return `<tr><td><span class="st-tag" style="background:rgba(124,58,237,0.1);color:#a78bfa">COLA</span></td><td colspan="12">Analisis AI en curso...</td><td>${renderAssignment(item)}</td></tr>`;
+            }).join('');
+        }
+        function startPolling() { isPolling = true; setTimeout(async () => { if (!isPolling) return; await loadMain(); startPolling(); }, 3000); }
+        async function cleanupHistory() { if (!confirm('¿Limpiar historial y archivos asociados?')) return; const result = await api('/api/cleanup', { method: 'DELETE' }); if (result?.ok) { alert(result.message); loadMain(); } }
+        async function retryDocument(id) { const result = await api(`/api/documents/${id}/retry`, { method: 'POST' }); if (result?.ok) { alert(result.message); loadMain(); } }
+        async function retryFailedDocuments() { const result = await api('/api/documents/retry-failed', { method: 'POST' }); if (result?.ok) { alert(result.message); loadMain(); } }
+        async function assignDocument(id, assignedTo) { const result = await api(`/api/documents/${id}/assign`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assigned_to: Number(assignedTo) }) }); if (result?.ok) loadMain(); }
+        async function exportToExcel() {
+            if (currentData.length === 0) return alert('Nada que exportar.');
+            const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Reporte');
+            ws.columns = [{header:'Fecha',key:'f',width:12},{header:'Emisor',key:'e',width:25},{header:'NIT',key:'n',width:15},{header:'Factura',key:'fac',width:15},{header:'Total',key:'tot',width:15}];
+            currentData.filter(x => x.status === 'completed' && x.extracted_data).forEach(item => { try { const ed = typeof item.extracted_data === 'string' ? JSON.parse(item.extracted_data) : item.extracted_data; ws.addRow({ f:new Date(item.created_at).toLocaleDateString(), e:ed.emisor, n:ed.nitEmisor, fac:ed.numeroFactura, tot:ed.total }); } catch (_) {} });
+            const buf = await wb.xlsx.writeBuffer(); const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'Reporte_Contable.xlsx'; link.click();
+        }
+        async function loadTeam() {
+            const data = await api('/api/team/users'); if (!data) return; teamUsers = Array.isArray(data) ? data : [];
+            document.getElementById('team-tbody').innerHTML = teamUsers.map(user => `<tr><td>${esc(user.name)}</td><td>${esc(user.email)}</td><td><select class="input-pro" onchange="updateTeamUser(${user.id}, this.value, null)"><option value="admin" ${user.role==='admin'?'selected':''}>Admin</option><option value="user" ${user.role==='user'?'selected':''}>Operador</option><option value="viewer" ${user.role==='viewer'?'selected':''}>Solo lectura</option></select></td><td>${user.active ? 'SI' : 'NO'}</td><td>${actionButton(user.active ? 'Desactivar' : 'Activar', `toggleTeamUser(${user.id}, ${user.active ? 'false' : 'true'})`)}</td></tr>`).join('');
+        }
+        async function createTeamUser() {
+            const result = await api('/api/team/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: document.getElementById('team-name').value, email: document.getElementById('team-email').value, password: document.getElementById('team-password').value, role: document.getElementById('team-role').value }) });
+            if (result?.ok) { document.getElementById('team-name').value=''; document.getElementById('team-email').value=''; document.getElementById('team-password').value=''; loadTeam(); }
+            else if (result?.error) alert(result.error);
+        }
+        async function updateTeamUser(id, role, active) {
+            const payload = {}; if (role !== null) payload.role = role; if (active !== null) payload.active = active;
+            const result = await api(`/api/team/users/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (result?.ok) { loadTeam(); loadMain(); } else if (result?.error) alert(result.error);
+        }
+        async function toggleTeamUser(id, active) { await updateTeamUser(id, null, active); }
+        async function loadAudit() {
+            const data = await api('/api/audit'); if (!data) return;
+            document.getElementById('audit-tbody').innerHTML = data.map(item => `<tr><td>${esc(new Date(item.created_at).toLocaleString())}</td><td>${esc(item.actor_name || '-')}</td><td>${esc(item.action)}</td><td>${esc(item.target_type || '-')} ${esc(item.target_id || '')}</td><td>${esc(JSON.stringify(item.detail_json || {}))}</td></tr>`).join('');
+        }
+        async function loadClients() {
+            const data = await api('/api/saas/dashboard-master'); if (!data) return;
+            document.getElementById('client-list').innerHTML = data.companies.map(company => `<div class="table-wrap" style="padding:1rem; margin-bottom:1rem"><b>${esc(company.name)}</b><div class="stack" style="margin-top:10px"><input type="text" id="c-nit-${company.id}" value="${esc(company.nit || '')}" placeholder="NIT" class="input-pro" style="width:140px"><input type="text" id="c-city-${company.id}" value="${esc(company.city || '')}" placeholder="Ciudad" class="input-pro" style="width:140px"><select id="c-st-${company.id}" class="input-pro" style="width:120px"><option value="active" ${company.status==='active'?'selected':''}>ACTIVE</option><option value="pending" ${company.status==='pending'?'selected':''}>PENDING</option></select><select id="c-prov-${company.id}" class="input-pro" style="width:180px"><option value="gemini" ${company.provider==='gemini'?'selected':''}>GOOGLE GEMINI</option><option value="groq" ${company.provider==='groq'?'selected':''}>GROQ</option></select><input type="date" id="c-dt-${company.id}" value="${esc(company.next_billing_date ? company.next_billing_date.split('T')[0] : '')}" class="input-pro" style="width:160px"><input type="password" id="c-gk-${company.id}" value="" placeholder="${company.has_gemini_api_key ? 'Gemini API Key configurada' : 'Gemini API Key'}" class="input-pro" style="width:220px"><input type="password" id="c-gr-${company.id}" value="" placeholder="${company.has_groq_api_key ? 'Groq API Key configurada' : 'Groq API Key'}" class="input-pro" style="width:220px"><button class="btn-pro btn-p" onclick="updateClient(${company.id})">Guardar</button></div></div>`).join('');
+        }
+        async function updateClient(id) {
+            const result = await api(`/api/saas/companies/${id}/update-pro`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status:document.getElementById(`c-st-${id}`).value, plan_id:1, next_billing_date:document.getElementById(`c-dt-${id}`).value, nit:document.getElementById(`c-nit-${id}`).value, city:document.getElementById(`c-city-${id}`).value, phone:'', email_contact:'', provider:document.getElementById(`c-prov-${id}`).value, gemini_api_key:document.getElementById(`c-gk-${id}`).value, groq_api_key:document.getElementById(`c-gr-${id}`).value }) });
+            if (result?.ok) { alert(result.message); loadClients(); } else if (result?.error) alert(result.error);
+        }
+        async function uploadSelection(fileList, useRelativePath) {
+            const formData = new FormData(); const relativePaths = [];
+            for (const file of fileList) { formData.append('pdfs', file); relativePaths.push(useRelativePath ? (file.webkitRelativePath || file.name) : file.name); }
+            formData.append('relative_paths', JSON.stringify(relativePaths)); formData.append('max_retries', '3');
+            const result = await api('/api/upload', { method:'POST', body:formData }); if (result?.error) alert(result.error); await loadMain();
+        }
+        document.getElementById('fi').onchange = async e => { await uploadSelection(e.target.files, false); e.target.value=''; };
+        document.getElementById('folder-input').onchange = async e => { await uploadSelection(e.target.files, true); e.target.value=''; };
+        async function init() {
+            const result = await requestJson('/api/auth/me');
+            if (!result.ok) { me = null; renderShell(); return; }
+            me = result.data.user; renderShell(); if (canManageCompany()) await ensureTeamUsers(); setView('main');
+        }
+        init();
+    </script>
+</body>
+</html>

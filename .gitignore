@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+
+# Logs
+*.log
+server.err.log
+server.out.log
+
+# Processed files
+processed/
+
+# Input files (PDFs uploaded by users)
+input/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
