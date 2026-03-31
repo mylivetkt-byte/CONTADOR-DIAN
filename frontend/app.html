@@ -452,6 +452,7 @@ tbody tr:hover{
       <div class="nav-group">Empresa</div>
       <div class="nav-item" onclick="setView('team')">Equipo</div>
       <div class="nav-item" onclick="setView('audit')">Auditoria</div>
+    <div class="nav-item" onclick="cleanupHistory()" style="margin-top:10px; color:#ff4444; font-weight:700">Limpiar Historial</div>
     </div>
     <div class="profile-chip">
       <p id="usr"></p>
@@ -1508,6 +1509,19 @@ async function upload(files, useRelative) {
 
 document.getElementById('fi').onchange = async (e) => { await upload(e.target.files, false); e.target.value = ''; };
 document.getElementById('folder').onchange = async (e) => { await upload(e.target.files, true); e.target.value = ''; };
+
+async function cleanupHistory() {
+  if (!confirm('¿Seguro? Se eliminaran todos los registros del historial (no los PDFs ya procesados).')) return;
+  try {
+    const res = await req('/api/cleanup', { method: 'DELETE' });
+    if (res.ok) {
+      alert('Historial limpiado correctamente.');
+      window.location.reload();
+    }
+  } catch (err) {
+    alert('Error al limpiar historial.');
+  }
+}
 
 async function handleResetFromUrl() {
   const params = new URLSearchParams(location.search);
