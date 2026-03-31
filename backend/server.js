@@ -545,6 +545,40 @@ async function ensureRuntimeSchema() {
             await query(`UPDATE configs SET ${updates.join(', ')} WHERE id = $${index}`, params);
         }
     }
+
+    // Crear empresa maestra y superadmin inicial si no hay usuarios
+    const userCount = await query('SELECT COUNT(*)::int AS total FROM users');
+    if (userCount.rows[0].total === 0) {
+        console.log('[INIT] No se detectaron usuarios. Creando Super Admin inicial...');
+        const companyRes = await query(`
+            INSERT INTO companies (id, name, status, plan_id)
+            VALUES (1, 'Master Company', 'active', 3)
+            ON CONFLICT (id) DO NOTHING
+            RETURNING id
+        `);
+        const masterCompanyId = companyRes.rows[0]?.id || 1;
+
+        const adminPasswordHash = await bcrypt.hash('admin12345678', 12);
+        await query(`
+            INSERT INTO users (id, company_id, name, email, password_hash, role, is_superadmin, active)
+            VALUES (1, $1, 'Master Admin', 'admin@contador.com', $2, 'admin', TRUE, TRUE)
+            ON CONFLICT (id) DO NOTHING
+        `, [masterCompanyId, adminPasswordHash]);
+
+        await query(`
+            INSERT INTO configs (company_id, provider)
+            VALUES ($1, 'gemini')
+            ON CONFLICT (company_id) DO NOTHING
+        `, [masterCompanyId]);
+
+        await query(`
+            INSERT INTO subscriptions (company_id, status, plan_id, current_period_end)
+            VALUES ($1, 'active', 3, CURRENT_DATE + INTERVAL '365 days')
+            ON CONFLICT (company_id) DO NOTHING
+        `, [masterCompanyId]);
+
+        console.log('[INIT] Usuario Super Admin inicial creado: admin@contador.com / admin12345678');
+    }
 }
 
 async function getCompanyWithPlan(companyId) {
