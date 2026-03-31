@@ -558,10 +558,10 @@ async function ensureRuntimeSchema() {
         `);
         const masterCompanyId = companyRes.rows[0]?.id || 1;
 
-        const adminPasswordHash = await bcrypt.hash('admin12345678', 12);
+        const adminPasswordHash = await bcrypt.hash('admin123', 12);
         await query(`
             INSERT INTO users (id, company_id, name, email, password_hash, role, is_superadmin, active)
-            VALUES (1, $1, 'Master Admin', 'admin@contador.com', $2, 'admin', TRUE, TRUE)
+            VALUES (1, $1, 'Master Admin', 'admincontadores@gmail.com', $2, 'admin', TRUE, TRUE)
             ON CONFLICT (id) DO NOTHING
         `, [masterCompanyId, adminPasswordHash]);
 
@@ -577,7 +577,7 @@ async function ensureRuntimeSchema() {
             ON CONFLICT (company_id) DO NOTHING
         `, [masterCompanyId]);
 
-        console.log('[INIT] Usuario Super Admin inicial creado: admin@contador.com / admin12345678');
+        console.log('[INIT] Usuario Super Admin inicial creado: admincontadores@gmail.com / admin123');
     }
 }
 
