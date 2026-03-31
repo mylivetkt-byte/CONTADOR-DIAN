@@ -1073,9 +1073,11 @@ async function loadTeamUsers() { if (!canManage()) return; const d = await api('
 
 function assignHtml(item, extra = '') {
   const file = esc(item.original_filename || item.filename || '-');
-  if (!canManage() || teamUsers.length === 0) return file + (extra ? `<div style="margin-top:6px">${extra}</div>` : '');
+  const pdfLink = `<div style="margin-top:6px"><a href="/api/documents/${item.id}/pdf" target="_blank" style="color:var(--accent);text-decoration:none;font-weight:700;font-size:0.8rem">👁️ Ver PDF</a></div>`;
+  
+  if (!canManage() || teamUsers.length === 0) return file + pdfLink + (extra ? `<div style="margin-top:6px">${extra}</div>` : '');
   const opts = teamUsers.map((u) => `<option value="${u.id}" ${Number(item.assigned_to) === Number(u.id) ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
-  return `${file}<div style="margin-top:6px"><select class="input-pro" onchange="assignDoc(${item.id}, this.value)">${opts}</select></div>${extra ? `<div style="margin-top:6px">${extra}</div>` : ''}`;
+  return `${file}${pdfLink}<div style="margin-top:6px"><select class="input-pro" onchange="assignDoc(${item.id}, this.value)">${opts}</select></div>${extra ? `<div style="margin-top:6px">${extra}</div>` : ''}`;
 }
 
 async function loadQueueStatus() {

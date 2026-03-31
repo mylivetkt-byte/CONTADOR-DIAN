@@ -368,6 +368,7 @@ async function ensureRuntimeSchema() {
 
     await query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS filename VARCHAR(255)`);
     await query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS "fileName" VARCHAR(255)`);
+    await query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS pdf_content BYTEA`);
     await query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS original_filename VARCHAR(255)`);
     await query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_path VARCHAR(500) DEFAULT ''`);
     await query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0`);
@@ -1798,7 +1799,8 @@ app.post('/api/sync/folder', authenticateToken, async (req, res) => {
             const internalName = `${Date.now()}_${uuidPrefix}_${filename}`;
             const dest = path.join(INPUT_DIR, internalName);
             await fs.copy(src, dest);
-            await query(`INSERT INTO documents (company_id, uploaded_by, filename, original_filename, status, source_path) VALUES ($1,$2,$3,$4,'pending',$5)`, [req.user.company_id, req.user.id, internalName, filename, src]);
+            const fileData = await fs.readFile(src);
+            await query(`INSERT INTO documents (company_id, uploaded_by, filename, original_filename, status, source_path, pdf_content) VALUES ($1,$2,$3,$4,'pending',$5,$6)`, [req.user.company_id, req.user.id, internalName, filename, src, fileData]);
             imported++;
         }
         if (pathId) await query('UPDATE local_sync_paths SET last_sync = NOW() WHERE id = $1', [pathId]);
@@ -1848,11 +1850,13 @@ app.post('/api/upload', authenticateToken, uploadRateLimiter, (req, res, next) =
         for (const [index, file] of req.files.entries()) {
             const originalFilename = normalizeText(file.originalname || file.filename, 255);
             const sourcePath = normalizeRelativePath(relativePaths[index] || originalFilename);
+            const fileData = await fs.readFile(file.path);
+            
             await query(
                 `INSERT INTO documents (
-                    company_id, uploaded_by, assigned_to, filename, original_filename, source_path, status, retry_count, max_retries
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-                [req.user.company_id, req.user.id, req.user.id, file.filename, originalFilename, sourcePath, 'pending', 0, maxRetries]
+                    company_id, uploaded_by, assigned_to, filename, original_filename, source_path, status, retry_count, max_retries, pdf_content
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                [req.user.company_id, req.user.id, req.user.id, file.filename, originalFilename, sourcePath, 'pending', 0, maxRetries, fileData]
             );
             await logUsage(req.user.company_id, req.user.id, 'upload_request');
             await writeAudit(req.user.company_id, req.user.id, 'upload_document', 'document', null, { originalFilename, sourcePath });
@@ -1930,6 +1934,28 @@ app.post('/api/documents/:id/retry', authenticateToken, retryRateLimiter, async 
     } catch (err) {
         console.error('[RETRY DOCUMENT ERROR]:', err.message);
         res.status(500).json({ error: 'No se pudo reenviar el documento.' });
+    }
+});
+
+app.get('/api/documents/:id/pdf', authenticateToken, async (req, res) => {
+    const documentId = Number(req.params.id);
+    try {
+        const { rows } = await query(`
+            SELECT pdf_content, filename, original_filename
+            FROM documents
+            WHERE id = $1 AND company_id = $2
+        `, [documentId, req.user.company_id]);
+        
+        if (rows.length === 0 || !rows[0].pdf_content) {
+            return res.status(404).json({ error: 'Archivo no encontrado en la base de datos.' });
+        }
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${rows[0].original_filename || rows[0].filename || 'document.pdf'}"`);
+        res.send(rows[0].pdf_content);
+    } catch (err) {
+        console.error('[PDF SERVE ERROR]:', err.message);
+        res.status(500).json({ error: 'Fallo al recuperar el archivo.' });
     }
 });
 

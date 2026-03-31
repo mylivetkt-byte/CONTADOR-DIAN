@@ -67,8 +67,14 @@ async function processOneDocument(doc) {
         `, [doc.id]);
 
         const filePath = path.join(inputDir, doc.filename);
-        if (!fs.existsSync(filePath)) {
-            throw new Error(`Archivo no encontrado fisicamente en: ${filePath}`);
+        let dataBuffer = doc.pdf_content;
+        
+        if (!dataBuffer) {
+            if (fs.existsSync(filePath)) {
+                dataBuffer = await fs.readFile(filePath);
+            } else {
+                throw new Error(`Archivo no encontrado en base de datos ni fisicamente en el disco.`);
+            }
         }
 
         console.log(`[Queue] Consultando configuracion de Empresa ID ${doc.company_id}...`);
@@ -84,7 +90,6 @@ async function processOneDocument(doc) {
         providerForMetrics = String(rawProvider).toLowerCase();
 
         console.log('[Queue] Extrayendo texto del PDF...');
-        const dataBuffer = fs.readFileSync(filePath);
         const pdfData = await pdf(dataBuffer);
         const invoiceText = pdfData.text;
 
