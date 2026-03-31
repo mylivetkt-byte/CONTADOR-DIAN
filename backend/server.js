@@ -313,10 +313,51 @@ function generateTemporaryPassword(length = 12) {
 }
 
 async function ensureRuntimeSchema() {
+    // Definir tablas base si no existen para evitar errores en ALTER
+    await query(`
+        CREATE TABLE IF NOT EXISTS companies (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await query(`
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            company_id INTEGER REFERENCES companies(id),
+            name VARCHAR(255),
+            email VARCHAR(255) UNIQUE,
+            password_hash VARCHAR(255),
+            role VARCHAR(20) DEFAULT 'user',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await query(`
+        CREATE TABLE IF NOT EXISTS documents (
+            id SERIAL PRIMARY KEY,
+            company_id INTEGER REFERENCES companies(id),
+            uploaded_by INTEGER REFERENCES users(id),
+            status VARCHAR(20) DEFAULT 'pending',
+            extracted_data JSONB,
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await query(`
+        CREATE TABLE IF NOT EXISTS configs (
+            id SERIAL PRIMARY KEY,
+            company_id INTEGER UNIQUE REFERENCES companies(id),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    // Ahora aplicamos las modificaciones de columnas de forma segura
     await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superadmin BOOLEAN DEFAULT FALSE`);
     await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE`);
     await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER DEFAULT 0`);
     await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP`);
+
     await query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'`);
     await query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS plan_id INTEGER DEFAULT 1`);
     await query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS next_billing_date DATE DEFAULT (CURRENT_DATE + INTERVAL '30 days')`);
@@ -324,6 +365,7 @@ async function ensureRuntimeSchema() {
     await query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS city VARCHAR(100) DEFAULT ''`);
     await query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS phone VARCHAR(20) DEFAULT ''`);
     await query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS email_contact VARCHAR(100) DEFAULT ''`);
+
     await query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS filename VARCHAR(255)`);
     await query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS "fileName" VARCHAR(255)`);
     await query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS original_filename VARCHAR(255)`);
@@ -332,6 +374,7 @@ async function ensureRuntimeSchema() {
     await query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS max_retries INTEGER DEFAULT 3`);
     await query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMP`);
     await query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL`);
+
     await query(`ALTER TABLE configs ADD COLUMN IF NOT EXISTS provider VARCHAR(50) DEFAULT 'gemini'`);
     await query(`ALTER TABLE configs ADD COLUMN IF NOT EXISTS gemini_api_key TEXT`);
     await query(`ALTER TABLE configs ADD COLUMN IF NOT EXISTS groq_api_key TEXT`);
