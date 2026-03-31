@@ -651,7 +651,15 @@
             if (!company) return null;
             return allUsage.find((item) => Number(item.id) === Number(company.id))
                 || allUsage.find((item) => String(item.name || '').toLowerCase() === String(company.name || '').toLowerCase())
-                || null;
+                || {
+                    docs_month: 0,
+                    quota_docs_month: Number(company.plan_max_u || 0),
+                    documents_total: Number(company.documents_total || 0),
+                    error_docs: 0,
+                    quota_used_pct: 0,
+                    error_rate_pct: 0,
+                    plan_name: company.plan_name || '-'
+                };
         }
 
         function fmtNumber(value, digits = 0) {
@@ -775,8 +783,10 @@
             }
             const companyPayments = allPayments.filter((payment) => Number(payment.company_id) === Number(company.id)).slice(0, 5);
             const usage = usageForCompany(company);
-            const quota = Number(usage?.quota_docs_month || 0);
+            const planData = allPlans.find((p) => Number(p.id) === Number(company.plan_id)) || null;
+            const quota = Number(usage?.quota_docs_month || planData?.max_docs_month || planData?.max_documents_month || 0);
             const docsMonth = Number(usage?.docs_month || 0);
+            const docsTotal = Number(usage?.documents_total ?? company.documents_total ?? 0);
             const remaining = Math.max(quota - docsMonth, 0);
             const percent = quota > 0 ? Math.min((docsMonth / quota) * 100, 100) : 0;
             const users = companyUsersCache[company.id] || [];
@@ -790,7 +800,7 @@
                             ${companyStatusTag(company)}
                             ${subscriptionTag(company)}
                             <span class="pill">${Number(company.active_users || 0)} usuarios activos</span>
-                            <span class="pill">${Number(company.documents_total || 0)} documentos</span>
+                            <span class="pill">${docsTotal} documentos</span>
                             <span class="pill">${esc(company.provider || 'gemini')}</span>
                         </div>
                     </div>
@@ -824,6 +834,7 @@
                     <div class="detail-actions">
                         <button class="btn btn-primary" onclick="saveCompany(${company.id})">Guardar cambios</button>
                         <button class="btn btn-secondary" onclick="setView('payments', document.querySelector('.nav-btn[data-view=&quot;payments&quot;]')); syncPaymentCompanyInput();">Registrar pago</button>
+                        <button class="btn" style="background:var(--danger-soft);color:#9e2d2d;border:1px solid rgba(214,71,71,0.18);" onclick="deleteCompany(${company.id}, '${esc(company.name || '')}')">Eliminar empresa</button>
                     </div>
                 </div>
                 <div class="subsection">
@@ -831,17 +842,17 @@
                     <div class="mini-grid">
                         <div class="mini-stat"><div class="label">Estado suscripcion</div><div class="value" style="font-size: 18px;">${esc(company.subscription_status || company.status || 'active')}</div></div>
                         <div class="mini-stat"><div class="label">Usuarios activos</div><div class="value">${Number(company.active_users || 0)}</div></div>
-                        <div class="mini-stat"><div class="label">Docs totales</div><div class="value">${Number(company.documents_total || 0)}</div></div>
-                        <div class="mini-stat"><div class="label">Docs del mes</div><div class="value">${Number(usage?.docs_month || 0)}</div></div>
+                        <div class="mini-stat"><div class="label">Docs totales</div><div class="value">${docsTotal}</div></div>
+                        <div class="mini-stat"><div class="label">Docs del mes</div><div class="value">${docsMonth}</div></div>
                     </div>
                 </div>
                 <div class="subsection">
                     <h3>Consumo del plan</h3>
                     <div class="mini-grid">
                         <div class="mini-stat"><div class="label">Plan</div><div class="value" style="font-size: 18px;">${esc(usage?.plan_name || company.plan_name || '-')}</div></div>
-                        <div class="mini-stat"><div class="label">Cuota mes</div><div class="value">${quota}</div></div>
+                        <div class="mini-stat"><div class="label">Cuota mes</div><div class="value">${quota > 0 ? quota : 'Sin límite'}</div></div>
                         <div class="mini-stat"><div class="label">Consumidos</div><div class="value">${docsMonth}</div></div>
-                        <div class="mini-stat"><div class="label">Disponibles</div><div class="value">${remaining}</div></div>
+                        <div class="mini-stat"><div class="label">Disponibles</div><div class="value">${quota > 0 ? remaining : '∞'}</div></div>
                     </div>
                     <div style="margin-top:12px; background: rgba(23,50,72,0.08); border-radius: 999px; height: 12px; overflow: hidden;">
                         <div style="width:${percent}%; height:100%; background: linear-gradient(90deg, #0f9d7a 0%, #d9862a 100%);"></div>
@@ -1071,6 +1082,18 @@
             if (Number(selectedCompanyId) === Number(companyId) && companyMode === 'view') {
                 renderCompanyDetail();
             }
+        }
+
+        async function deleteCompany(id, name) {
+            if (!confirm(`¿Seguro que deseas eliminar la empresa "${name}"?\n\nEsta acción eliminará todos sus usuarios, documentos y configuraciones. No se puede deshacer.`)) return;
+            const result = await api(`/api/saas/companies/${id}`, { method: 'DELETE' });
+            if (!result) return;
+            if (!result.ok) {
+                alert(result.data.error || 'No se pudo eliminar la empresa.');
+                return;
+            }
+            selectedCompanyId = null;
+            await Promise.all([loadCompanies(), loadDashboard(), loadUsage()]);
         }
 
         async function saveCompany(id) {

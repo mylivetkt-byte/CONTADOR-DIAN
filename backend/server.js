@@ -1398,6 +1398,22 @@ app.post('/api/saas/companies/:id/update-pro', authenticateToken, isSuperAdmin, 
     }
 });
 
+app.delete('/api/saas/companies/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    const cid = Number(req.params.id);
+    if (!cid) return res.status(400).json({ error: 'ID de empresa invalido.' });
+    try {
+        const exists = await query('SELECT id, name FROM companies WHERE id = $1', [cid]);
+        if (!exists.rows.length) return res.status(404).json({ error: 'Empresa no encontrada.' });
+        const companyName = exists.rows[0].name;
+        await query('DELETE FROM companies WHERE id = $1', [cid]);
+        await writeAudit(null, req.user.id, 'delete_company', 'company', cid, { name: companyName });
+        res.json({ ok: true, message: `Empresa "${companyName}" eliminada correctamente.` });
+    } catch (err) {
+        console.error('[DELETE COMPANY ERROR]:', err.message);
+        res.status(500).json({ error: 'No se pudo eliminar la empresa.' });
+    }
+});
+
 app.get('/api/saas/companies/:id/users', authenticateToken, isSuperAdmin, async (req, res) => {
     const companyId = Number(req.params.id);
     try {
