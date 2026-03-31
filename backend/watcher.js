@@ -10,7 +10,7 @@ const DEFAULT_MAX_RETRIES = 3;
 const MAX_CONCURRENT = Math.max(1, Number(process.env.QUEUE_CONCURRENCY || 1));
 const POLL_INTERVAL_MS = Math.max(1000, Number(process.env.QUEUE_POLL_MS || 2000));
 const RATE_LIMIT_PAUSE_MS = Math.max(5000, Number(process.env.QUEUE_RATE_LIMIT_PAUSE_MS || 20000));
-const INTER_DOCUMENT_DELAY_MS = Math.max(0, Number(process.env.QUEUE_INTER_DOCUMENT_DELAY_MS || 3000));
+const INTER_DOCUMENT_DELAY_MS = Math.max(0, Number(process.env.QUEUE_INTER_DOCUMENT_DELAY_MS || 250));
 
 fs.ensureDirSync(inputDir);
 fs.ensureDirSync(processedDir);
@@ -20,6 +20,18 @@ let pauseUntil = 0;
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRateLimitError(error) {
+    const message = String(error?.message || '').toUpperCase();
+    return (
+        message.includes('RATE_LIMIT') ||
+        message.includes('429') ||
+        message.includes('TOO MANY REQUESTS') ||
+        message.includes('RESOURCE_EXHAUSTED') ||
+        message.includes('QUOTA EXCEEDED') ||
+        message.includes('QUOTA_EXCEEDED')
+    );
 }
 
 async function recordProcessingUsage(doc, { status, provider, durationMs = null, costEst = null }) {
@@ -83,7 +95,10 @@ async function processOneDocument(doc) {
 
         console.log(`[Queue] ENVIANDO A IA (${provName})...`);
         const startTime = Date.now();
-        const extractedData = await extractDataFromPDF(invoiceText, config);
+        const extractedData = await extractDataFromPDF(invoiceText, config, { 
+            sourcePath: doc.source_path, 
+            originalFilename: doc.original_filename 
+        });
         durationMs = Date.now() - startTime;
         const duration = (durationMs / 1000).toFixed(1);
 
@@ -108,19 +123,19 @@ async function processOneDocument(doc) {
         return { rateLimited: false };
     } catch (innerErr) {
         console.error(`[Queue] FALLO EN ID ${doc.id}:`, innerErr.message);
-        const isRateLimit = String(innerErr.message || '').includes('RATE_LIMIT_GROQ_429');
+        const isRateLimit = isRateLimitError(innerErr);
 
         if (isRateLimit) {
-            pauseUntil = Date.now() + RATE_LIMIT_PAUSE_MS;
             await query(`
                 UPDATE documents
                 SET status = 'pending',
                     error_message = $1,
+                    last_attempt_at = CURRENT_TIMESTAMP + ($2::text || ' milliseconds')::interval,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = $2
-            `, [`Groq rate limit (429). Reintentando en ${Math.round(RATE_LIMIT_PAUSE_MS / 1000)}s.`, doc.id]);
+                WHERE id = $3
+            `, ['Rate limit del proveedor IA. Documento devuelto a la cola para reintento.', String(RATE_LIMIT_PAUSE_MS), doc.id]);
             await recordProcessingUsage(doc, { status: 'rate_limited', provider: providerForMetrics, durationMs });
-            console.error(`[Queue] Rate limit detectado. Pausa global de ${Math.round(RATE_LIMIT_PAUSE_MS / 1000)}s.`);
+            console.error(`[Queue] Rate limit detectado. Documento devuelto a pending y reintentable despues de ${Math.round(RATE_LIMIT_PAUSE_MS / 1000)}s.`);
             return { rateLimited: true };
         }
 
@@ -156,6 +171,7 @@ async function processPendingFiles() {
             SELECT *
             FROM documents
             WHERE status = 'pending'
+              AND (last_attempt_at IS NULL OR last_attempt_at <= CURRENT_TIMESTAMP)
             ORDER BY created_at ASC
             LIMIT $1
         `, [MAX_CONCURRENT]);
@@ -168,7 +184,7 @@ async function processPendingFiles() {
             const result = await processOneDocument(row);
             if (result?.rateLimited) {
                 await sleep(500);
-                break;
+                continue;
             }
             if (INTER_DOCUMENT_DELAY_MS > 0) {
                 console.log(`[Queue] Esperando ${Math.round(INTER_DOCUMENT_DELAY_MS / 1000)}s antes del siguiente documento.`);

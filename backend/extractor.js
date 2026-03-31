@@ -41,6 +41,8 @@ function normalizeInvoiceText(text) {
     return String(text || '')
         .replace(/\r/g, '\n')
         .replace(/[ \t]+/g, ' ')
+        // OCR/PDF extraction often inserts spaces inside formatted amounts like "2. 591, 04".
+        .replace(/(?<=\d)\s*([.,])\s*(?=\d)/g, '$1')
         .replace(/\n{2,}/g, '\n')
         .trim();
 }
@@ -122,10 +124,20 @@ function isLikelyOfficialDianStructuredInvoice(text, summary = {}) {
     const upper = normalizeInvoiceText(text).toUpperCase();
     const structuralMarkers = [
         'DATOS DEL DOCUMENTO',
-        'DATOS DEL EMISOR / VENDEDOR',
-        'DATOS DEL ADQUIRIENTE / COMPRADOR',
+        'DATOS DEL EMISOR',
+        'DATOS DEL VENDEDOR',
+        'DATOS DEL ADQUIRIENTE',
+        'DATOS DEL COMPRADOR',
         'DETALLES DE PRODUCTOS',
-        'DATOS TOTALES'
+        'DATOS TOTALES',
+        'DOCUMENTO SOPORTE',
+        'REPRESENTACION GRAFICA',
+        'REPRESENTACIÓN GRÁFICA',
+        'NOTA CRÉDITO',
+        'NOTA CREDITO',
+        'FACTURA ELECTRÓNICA DE TRANSPORTE',
+        'FACTURA ELECTRÓNICA DE VENTA',
+        'DOCUMENTO EQUIVALENTE POS'
     ];
     const validationMarkers = [
         'DOCUMENTO VALIDADO POR LA DIAN',
@@ -133,12 +145,19 @@ function isLikelyOfficialDianStructuredInvoice(text, summary = {}) {
         'SOLUCIÃ“N GRATUITA DIAN',
         'PDF GENERADO POR:',
         'XML GENERADO POR: PROVEEDOR TECNOLOGICO',
-        'XML GENERADO POR: PROVEEDOR TECNOLÃ“GICO'
+        'XML GENERADO POR: PROVEEDOR TECNOLÃ“GICO',
+        'XML GENERADO POR: SOFTWARE PROPIO',
+        'GENERADO POR: PROVEEDOR TECNOLÓGICO'
     ];
+    const hasCudeCufe = upper.includes('CUFE') || upper.includes('CUDE');
     const structureHits = structuralMarkers.filter((marker) => upper.includes(marker)).length;
     const validationHits = validationMarkers.filter((marker) => upper.includes(marker)).length;
     const hasTotals = toNumber(summary.subtotal) > 0 && toNumber(summary.total) > 0;
-    return structureHits >= 3 && validationHits >= 1 && hasTotals;
+    
+    const isPosFast = upper.includes('EQUIVALENTE POS') || upper.includes('SISTEMA P.O.S');
+    if (isPosFast && hasTotals) return true;
+
+    return (structureHits >= 3) && (validationHits >= 1 || (hasCudeCufe && structureHits >= 4)) && hasTotals;
 }
 
 function buildEmptyIvas() {
@@ -152,7 +171,12 @@ function parseLocaleNumber(value) {
     if (!cleaned) return 0;
 
     if (cleaned.includes(',') && cleaned.includes('.')) {
-        return toNumber(cleaned.replace(/\./g, '').replace(',', '.'));
+        const lastComma = cleaned.lastIndexOf(',');
+        const lastDot = cleaned.lastIndexOf('.');
+        if (lastComma > lastDot) {
+            return toNumber(cleaned.replace(/\./g, '').replace(',', '.'));
+        }
+        return toNumber(cleaned.replace(/,/g, ''));
     }
 
     if (cleaned.includes(',')) {
@@ -462,6 +486,27 @@ function inferIvasFromText(text, summary) {
     }
 
     if (detailHits === 0 && acc[0] <= 0) {
+        if (toNumber(summary.subtotal) > 0 && toNumber(summary.genericIva) > 0) {
+            const subtotal = round2(toNumber(summary.subtotal));
+            const iva = round2(toNumber(summary.genericIva));
+            const pct = normalizePct(Math.round((iva / subtotal) * 100));
+            if (pct === 0) {
+                const base19 = round2(Math.min(subtotal, iva / 0.19));
+                const base0 = round2(Math.max(0, subtotal - base19));
+                return [
+                    { porcentaje: 19, base: base19, valor: iva },
+                    { porcentaje: 8, base: 0, valor: 0 },
+                    { porcentaje: 5, base: 0, valor: 0 },
+                    { porcentaje: 0, base: base0, valor: 0 }
+                ];
+            }
+            return [
+                { porcentaje: 19, base: pct === 19 ? subtotal : 0, valor: pct === 19 ? iva : 0 },
+                { porcentaje: 8, base: pct === 8 ? subtotal : 0, valor: pct === 8 ? iva : 0 },
+                { porcentaje: 5, base: pct === 5 ? subtotal : 0, valor: pct === 5 ? iva : 0 },
+                { porcentaje: 0, base: pct === 0 ? subtotal : 0, valor: 0 }
+            ];
+        }
         return buildEmptyIvas();
     }
 
@@ -475,14 +520,14 @@ function inferIvasFromText(text, summary) {
 function inferSummaryFromText(text) {
     const src = normalizeInvoiceText(text);
     const totalsBlock = buildTotalsBlock(src);
-    const subtotal = extractStrictAmount(totalsBlock, ['SUBTOTAL BRUTO', 'SUBTOTAL'], { allowZero: true, preferLast: true });
-    const total = extractStrictAmount(totalsBlock, ['TOTAL A PAGAR', 'TOTAL CON IVA', 'TOTAL FACTURA', 'VALOR TOTAL', 'TOTAL:', 'TOTAL$'], { allowZero: true, preferLast: true });
+    const subtotal = extractStrictAmount(totalsBlock, ['SUBTOTAL BRUTO', 'SUBTOTAL', 'TOTAL BRUTO DOCUMENTO'], { allowZero: true, preferLast: true });
+    const total = extractStrictAmount(totalsBlock, ['TOTAL A PAGAR', 'TOTAL CON IVA', 'TOTAL FACTURA', 'VALOR TOTAL', 'TOTAL DOCUMENTO', 'TOTAL NETO DOCUMENTO', 'TOTAL:', 'TOTAL$'], { allowZero: true, preferLast: true });
     const descuentoTotal = extractStrictAmount(totalsBlock, ['DESCUENTO DETALLE', 'DESCUENTO GLOBAL', 'DESCUENTO'], { allowZero: true, preferLast: true });
     const reteFuente = extractStrictAmount(totalsBlock, ['RETEFUENTE', 'RETENCION EN LA FUENTE', 'RETE FUENTE'], { allowZero: true, preferLast: true });
     const reteIva = extractStrictAmount(totalsBlock, ['RETEIVA', 'RETE IVA'], { allowZero: true, preferLast: true });
     const reteIca = extractStrictAmount(totalsBlock, ['RETEICA', 'RETE ICA'], { allowZero: true, preferLast: true });
     const impuestoConsumo = extractStrictAmount(totalsBlock, ['IMPUESTO AL CONSUMO', 'IMPOCONSUMO', 'I.A.C'], { allowZero: true, preferLast: true });
-    const genericIva = extractStrictAmount(totalsBlock, ['IVA 19 %', 'IVA 19%', 'VALOR IVA', 'IVA'], { allowZero: true, preferLast: true });
+    const genericIva = extractStrictAmount(totalsBlock, ['IVA 19 %', 'IVA 19%', 'VALOR IVA', 'TOTAL IVA', 'IVA'], { allowZero: true, preferLast: true });
 
     return {
         subtotal,
@@ -516,12 +561,24 @@ function mergeSummaryFallback(raw = {}, summary = {}) {
             const pct = Math.round((summary.genericIva / base) * 100);
             porcentaje = normalizePct(pct);
         }
+        if (porcentaje === 0) {
+            const base19 = round2(Math.min(base, toNumber(summary.genericIva) / 0.19));
+            const base0 = round2(Math.max(0, base - base19));
+            merged.ivasDiscriminados = [
+                { porcentaje: 19, base: base19, valor: summary.genericIva },
+                { porcentaje: 8, base: 0, valor: 0 },
+                { porcentaje: 5, base: 0, valor: 0 },
+                { porcentaje: 0, base: base0, valor: 0 }
+            ];
+            porcentaje = 19;
+        } else {
         merged.ivasDiscriminados = [
             { porcentaje: 19, base: porcentaje === 19 ? base : 0, valor: porcentaje === 19 ? summary.genericIva : 0 },
             { porcentaje: 8, base: porcentaje === 8 ? base : 0, valor: porcentaje === 8 ? summary.genericIva : 0 },
             { porcentaje: 5, base: porcentaje === 5 ? base : 0, valor: porcentaje === 5 ? summary.genericIva : 0 },
             { porcentaje: 0, base: porcentaje === 0 ? base : 0, valor: 0 }
         ];
+        }
     }
 
     if (Array.isArray(merged.ivasDiscriminados) && merged.ivasDiscriminados.length > 0 && summary.genericIva > 0) {
@@ -531,11 +588,22 @@ function mergeSummaryFallback(raw = {}, summary = {}) {
         if (allTax > totalRef * 0.8 || allTax <= 0) {
             const subtotal = Math.max(toNumber(merged.subtotal), summary.subtotal);
             const pct = subtotal > 0 ? normalizePct(Math.round((summary.genericIva / subtotal) * 100)) : 19;
-            merged.ivasDiscriminados = rows.map((row) => ({
-                porcentaje: row.porcentaje,
-                base: row.porcentaje === pct ? subtotal : 0,
-                valor: row.porcentaje === pct ? summary.genericIva : 0
-            }));
+            if (pct === 0) {
+                const base19 = round2(Math.min(subtotal, toNumber(summary.genericIva) / 0.19));
+                const base0 = round2(Math.max(0, subtotal - base19));
+                merged.ivasDiscriminados = [
+                    { porcentaje: 19, base: base19, valor: summary.genericIva },
+                    { porcentaje: 8, base: 0, valor: 0 },
+                    { porcentaje: 5, base: 0, valor: 0 },
+                    { porcentaje: 0, base: base0, valor: 0 }
+                ];
+            } else {
+                merged.ivasDiscriminados = rows.map((row) => ({
+                    porcentaje: row.porcentaje,
+                    base: row.porcentaje === pct ? subtotal : 0,
+                    valor: row.porcentaje === pct ? summary.genericIva : 0
+                }));
+            }
         }
     }
 
@@ -896,14 +964,16 @@ function inferItemsFromDianText(text) {
     return items.slice(0, 150);
 }
 
-function inferDianStructuredExtraction(text) {
+function inferDianStructuredExtraction(text, metadata = {}) {
     const src = normalizeInvoiceText(text);
     const summary = inferSummaryFromText(src);
     if (!isLikelyOfficialDianStructuredInvoice(src, summary)) return null;
 
-    const docSection = sliceSection(src, 'Datos del Documento', ['Datos del Emisor / Vendedor', 'Datos del Emisor', 'Detalles de Productos']);
-    const emitterSection = sliceSection(src, 'Datos del Emisor / Vendedor', ['Datos del Adquiriente / Comprador', 'Detalles de Productos']);
-    const buyerSection = sliceSection(src, 'Datos del Adquiriente / Comprador', ['Detalles de Productos', 'Referencias', 'Notas Finales', 'Datos Totales']);
+    const docSection = sliceSection(src, 'Datos del Documento', ['Datos del Emisor', 'Datos del Vendedor', 'Datos del Adquiriente', 'Detalles de Productos']);
+    const emitterSection = sliceSection(src, 'Datos del Emisor', ['Datos del Adquiriente', 'Datos del Comprador', 'Detalles de Productos']) ||
+                           sliceSection(src, 'Datos del Vendedor', ['Datos del Adquiriente', 'Datos del Comprador', 'Detalles de Productos']);
+    const buyerSection = sliceSection(src, 'Datos del Adquiriente', ['Detalles de Productos', 'Referencias', 'Notas Finales', 'Datos Totales']) ||
+                         sliceSection(src, 'Datos del Comprador', ['Detalles de Productos', 'Referencias', 'Notas Finales', 'Datos Totales']);
 
     const detalleProductos = inferItemsFromDianText(src);
     const subtotal = toNumber(summary.subtotal);
@@ -940,13 +1010,15 @@ function inferDianStructuredExtraction(text) {
         matchFirst(emitterSection, /RAZON SOCIAL\s+EMISOR\s*[:\-]?\s*(.+)/i) ||
         matchFirst(emitterSection, /EMISOR\s*[:\-]?\s*(.+)/i, 1);
     const adquirente =
-        extractSectionValue(buyerSection, 'Nombre o Razón Social', ['Tipo de Documento', 'Número Documento']) ||
-        extractSectionValue(buyerSection, 'Nombre o Razon Social', ['Tipo de Documento', 'Numero Documento']) ||
+        extractSectionValue(buyerSection, 'Nombre o Razón Social', ['Tipo de Documento', 'Número Documento', 'NIT del adquiriente']) ||
+        extractSectionValue(buyerSection, 'Nombre o Razon Social', ['Tipo de Documento', 'Numero Documento', 'NIT del adquiriente']) ||
+        extractSectionValue(buyerSection, 'Razón social', ['NIT del adquiriente', 'Tipo de contribuyente']) ||
         matchFirst(buyerSection, /RAZON SOCIAL\s+ADQUIRIENTE\s*[:\-]?\s*(.+)/i) ||
         matchFirst(buyerSection, /ADQUIRIENTE\s*[:\-]?\s*(.+)/i, 1);
 
-    const numeroFacturaResolved = normalizeText(numeroFactura.replace(/\s+/g, '').replace(/-+/g, '-'), 80) ||
-        matchFirst(src, /NUMERO\s+DE\s+FACTURA\s*[:\-]?\s*([A-Z0-9-]+)/i) ||
+    const numeroFacturaResolved = normalizeText((numeroFactura||'').replace(/\s+/g, '').replace(/-+/g, '-'), 80) ||
+        extractSectionValue(docSection, 'Número de documento', ['Fecha', 'Hora']) ||
+        matchFirst(src, /NUMERO\s+DE\s+(?:FACTURA|DOCUMENTO)\s*[:\-]?\s*([A-Z0-9-]+)/i) ||
         matchFirst(src, /(?:PREFIJO|PREF)\s*[:\-]?\s*([A-Z]{1,8})[\s\S]{0,30}?(?:NUMERO|NUMERO FACTURA)\s*[:\-]?\s*([0-9]{2,})/i, 2);
     const nitEmisorResolved = nitEmisor ||
         matchFirst(emitterSection, /RAZON SOCIAL[\s\S]{0,200}?NIT\s*[:\-]?\s*([0-9.\-]+)/i) ||
@@ -954,9 +1026,49 @@ function inferDianStructuredExtraction(text) {
     const emisorResolved = emisor || matchFirst(emitterSection, /NOMBRE\s+O\s+RAZON\s+SOCIAL\s+EMISOR\s*[:\-]?\s*(.+)/i);
     const adquirenteResolved = adquirente || matchFirst(buyerSection, /NOMBRE\s+O\s+RAZON\s+SOCIAL\s+ADQUIRIENTE\s*[:\-]?\s*(.+)/i);
 
+    const isSupportDoc = src.toUpperCase().includes('DOCUMENTO SOPORTE') || src.toUpperCase().includes('ADQUISICIONES EFECTUADAS A SUJETOS NO OBLIGADOS');
+    const isPos = src.toUpperCase().includes('EQUIVALENTE POS') || src.toUpperCase().includes('SISTEMA P.O.S');
+    let tipoOperacion = extractSectionValue(docSection, 'Tipo de Operación', ['Fecha de orden de pedido', 'Fecha de orden', 'Fecha de Emisión', 'Fecha de Emision']) ||
+                         matchFirst(src, /Tipo de Operaci[oó]n\s*[:\-]?\s*([^\n\r]+)/i) || '';
+                         
+    if (tipoOperacion.length > 40) {
+        tipoOperacion = tipoOperacion.split(/\r?\n/)[0].trim();
+    }
+    
+    // Identificar si la factura proviene de una carpeta de "COMPRA" o similar por parte del usuario
+    const sourcePath = String(metadata.sourcePath || metadata.originalFilename || '').toUpperCase();
+    const isCompra = sourcePath.includes('COMPRA');
+
+    // Clasificación avanzada basada en los parámetros del usuario
+    let finalType = isCompra ? 'factura_compra' : 'factura_venta';
+    let specificSource = 'dian_estandar';
+    const op = tipoOperacion.trim().toUpperCase();
+
+    if (op.startsWith('20') || op.startsWith('22') || src.toUpperCase().includes('NOTA CRÉDITO') || src.toUpperCase().includes('NOTA CREDITO')) {
+        finalType = isCompra ? 'nota_credito_compra' : 'nota_credito';
+        specificSource = 'dian_nota_credito';
+    } else if (isSupportDoc) {
+        finalType = 'documento_soporte';
+        specificSource = 'dian_soporte';
+    } else if (op.startsWith('11') || op.includes('MANDATO')) {
+        specificSource = 'dian_mandato';
+    } else if (op.startsWith('12') || op.includes('TRANSPORTE')) {
+        specificSource = 'dian_transporte';
+    } else if (op.includes('SS-SINAPORTE') || op.includes('SIN APORTE')) {
+        specificSource = 'dian_sin_aporte';
+    } else if (isPos) {
+        finalType = isCompra ? 'factura_compra_pos' : 'factura_pos';
+        specificSource = 'dian_pos';
+    } else if (op.startsWith('10')) {
+        specificSource = 'dian_estandar';
+    }
+
     const raw = {
-        extractionSource: 'dian_parser',
-        tipoDocumento: 'factura_venta',
+        extractionSource: specificSource,
+        tipoDocumento: finalType,
+        sourcePath: metadata.sourcePath || '',
+        originalFilename: metadata.originalFilename || '',
+        tipoOperacion,
         prefijo: numeroFacturaResolved.includes('-') ? numeroFacturaResolved.split('-')[0] : '',
         numeroFactura: numeroFacturaResolved,
         cufe,
@@ -971,7 +1083,7 @@ function inferDianStructuredExtraction(text) {
         ciudadEmisor: '',
         regimenEmisor: '',
         adquirente: adquirenteResolved,
-        nitAdquirente,
+        nitAdquirente: nitAdquirente,
         direccionAdquirente: '',
         ciudadAdquirente: '',
         formaPago: extractSectionValue(docSection, 'Forma de pago', ['Fecha de Emisión', 'Fecha de Emision', 'Medio de Pago']),
@@ -985,12 +1097,14 @@ function inferDianStructuredExtraction(text) {
         reteIva: summary.reteIva,
         total: summary.total,
         ivasDiscriminados: summary.ivaRows,
-        detalleProductos
+        detalleProductos,
+        rawText: src
     };
 
     const normalized = normalizeExtraction(raw);
     const diff = Math.abs(toNumber(normalized.validacion?.diferenciaTotal));
-    if (diff > 1.5 && detalleProductos.length === 0) return null;
+    const hasStructuredSummary = subtotal > 0 && total > 0;
+    if (diff > 1.5 && detalleProductos.length === 0 && !hasStructuredSummary) return null;
     return normalized;
 }
 
@@ -1040,6 +1154,94 @@ function autoRepairIvas({ ivas, total, impuestoConsumo, reteFuente, reteIca, ret
     return { rows, repaired: false, diff };
 }
 
+function inferFamilyFromPath(value) {
+    const upper = String(value || '').toUpperCase();
+    if (!upper) return '';
+    if (
+        upper.includes('NC_COMPRA') ||
+        upper.includes('NOTACREDITOCOMPRA') ||
+        upper.includes('NOTA_CREDITO_COMPRA') ||
+        upper.includes('NC COMPRA') ||
+        upper.includes('NC COMPRA') ||
+        upper.includes('NC_COMPRAS') ||
+        upper.includes('NC COMPRAS')
+    ) {
+        return 'purchase_credit_note';
+    }
+    if (
+        upper.includes('NC_VENTA') ||
+        upper.includes('NOTA_CREDITO_VENTA') ||
+        upper.includes('NC VENTA') ||
+        upper.includes('DEVOLUCION_VENTA') ||
+        upper.includes('DEVOLUCION VENTA')
+    ) {
+        return 'sale_credit_note';
+    }
+    if (
+        upper.includes('COMPRA') ||
+        upper.includes('DOCUMENTO_SOPORTE') ||
+        upper.includes('DOCUMENTO SOPORTE') ||
+        upper.includes('FC/')
+    ) {
+        return 'purchase_invoice';
+    }
+    if (upper.includes('POS') || upper.includes('VENTA') || upper.includes('FV/')) {
+        return 'sale_invoice';
+    }
+    return '';
+}
+
+function mapDocumentTypeToFamily(tipoDocumento = '') {
+    const type = String(tipoDocumento || '').toLowerCase();
+    if (type === 'nota_credito_compra') return 'purchase_credit_note';
+    if (type === 'nota_credito') return 'sale_credit_note';
+    if (type === 'documento_soporte' || type.includes('compra')) return 'purchase_invoice';
+    return 'sale_invoice';
+}
+
+function inferDocumentIdentityHints(raw = {}) {
+    const familyFromPath = inferFamilyFromPath(raw.sourcePath || raw.originalFilename || '');
+    const typeUpper = String(raw.tipoDocumento || '').toUpperCase();
+    const opUpper = String(raw.tipoOperacion || '').toUpperCase();
+    const textUpper = String(raw.rawText || '').toUpperCase();
+    const isCreditNote =
+        typeUpper.includes('NOTA_CREDITO') ||
+        textUpper.includes('NOTA CRÉDITO') ||
+        textUpper.includes('NOTA CREDITO') ||
+        opUpper.startsWith('20') ||
+        opUpper.startsWith('22');
+    const isSupportDoc =
+        typeUpper.includes('DOCUMENTO_SOPORTE') ||
+        textUpper.includes('DOCUMENTO SOPORTE') ||
+        textUpper.includes('ADQUISICIONES EFECTUADAS A SUJETOS NO OBLIGADOS');
+    const isPos =
+        typeUpper.includes('FACTURA_POS') ||
+        textUpper.includes('EQUIVALENTE POS') ||
+        textUpper.includes('SISTEMA P.O.S');
+
+    if (isCreditNote) {
+        return {
+            family: familyFromPath === 'purchase_credit_note' ? 'purchase_credit_note' : (familyFromPath || 'sale_credit_note'),
+            isSupportDoc,
+            isPos
+        };
+    }
+
+    if (isSupportDoc) {
+        return { family: 'purchase_invoice', isSupportDoc: true, isPos };
+    }
+
+    if (familyFromPath) {
+        return { family: familyFromPath, isSupportDoc, isPos };
+    }
+
+    return {
+        family: isPos ? 'sale_invoice' : mapDocumentTypeToFamily(raw.tipoDocumento),
+        isSupportDoc,
+        isPos
+    };
+}
+
 function normalizeExtraction(raw = {}) {
     const rawIvas = normalizeIvas(raw.ivasDiscriminados);
     const detalleProductos = normalizeItems(raw.detalleProductos || raw.items);
@@ -1077,8 +1279,14 @@ function normalizeExtraction(raw = {}) {
         zeroTaxBreakdown.exenta = toNumber(iva0.base);
     }
 
-    const subtotalFromIvas = round2(iva0.base + iva5.base + iva8.base + iva19.base);
     const rawSubtotal = toNumber(raw.subtotal);
+    const hasAnyTaxRow = fixedIvas.some((x) => toNumber(x.base) > 0 || toNumber(x.valor) > 0);
+    if (!hasAnyTaxRow && rawSubtotal > 0 && toNumber(rawTotal) > 0 && Math.abs(rawTotal - rawSubtotal) <= 1) {
+        iva0.base = round2(rawSubtotal);
+        zeroTaxBreakdown.exenta = round2(rawSubtotal);
+    }
+
+    const subtotalFromIvas = round2(iva0.base + iva5.base + iva8.base + iva19.base);
     const subtotal = hasItemTaxData ? subtotalFromIvas : rawSubtotal;
 
     const computedTotal = round2(
@@ -1088,10 +1296,30 @@ function normalizeExtraction(raw = {}) {
     );
     const total = hasItemTaxData && Math.abs(rawTotal - computedTotal) > 1 ? computedTotal : (rawTotal || computedTotal);
 
+    let finalType = normalizeText(raw.tipoDocumento || 'factura_venta', 40);
+    const rawUpper = (raw.rawText || '').toUpperCase();
+    const opType = String(raw.tipoOperacion || '').toUpperCase();
+    
+    if (finalType === 'factura_venta') {
+        if (rawUpper.includes('DOCUMENTO SOPORTE') || rawUpper.includes('ADQUISICIONES EFECTUADAS')) finalType = 'documento_soporte';
+        else if (rawUpper.includes('NOTA CRÉDITO') || rawUpper.includes('NOTA CREDITO') || opType.startsWith('20') || opType.startsWith('22')) finalType = 'nota_credito';
+        else if (rawUpper.includes('EQUIVALENTE POS') || rawUpper.includes('SISTEMA P.O.S')) finalType = 'factura_pos';
+    }
+
+    const identity = inferDocumentIdentityHints(raw);
+    if (identity.family === 'purchase_credit_note') finalType = 'nota_credito_compra';
+    else if (identity.family === 'sale_credit_note') finalType = 'nota_credito';
+    else if (identity.family === 'purchase_invoice' && identity.isSupportDoc) finalType = 'documento_soporte';
+    else if (identity.family === 'purchase_invoice') finalType = 'factura_compra';
+    else if (identity.isPos) finalType = 'factura_pos';
+    else finalType = 'factura_venta';
+
     return {
         schemaVersion: 'co_factura_v1',
         extractionSource: normalizeText(raw.extractionSource || raw.processingSource || 'ai', 40),
-        tipoDocumento: normalizeText(raw.tipoDocumento || 'factura_venta', 40),
+        documentFamily: identity.family,
+        tipoDocumento: finalType,
+        tipoOperacion: normalizeText(raw.tipoOperacion, 150),
         prefijo: normalizeText(raw.prefijo, 30),
         numeroFactura: normalizeText(raw.numeroFactura, 80),
         cufe: normalizeText(raw.cufe, 200),
@@ -1148,10 +1376,23 @@ function normalizeExtraction(raw = {}) {
     };
 }
 
-function buildPrompt(text) {
-    return `Analiza esta FACTURA COLOMBIANA y responde SOLO JSON valido.
+function buildPrompt(text, metadata = {}) {
+    const sourcePath = String(metadata.sourcePath || metadata.originalFilename || '').toUpperCase();
+    const familyHint = inferFamilyFromPath(sourcePath);
+    let roleInstruction = '';
+    if (familyHint === 'purchase_invoice') {
+        roleInstruction = `\n\nATENCION: Este documento pertenece a COMPRAS o DOCUMENTO SOPORTE. Ajusta la clasificacion asumiendo que el usuario es el ADQUIRIENTE.\nSi el documento es una factura de venta emitida por un tercero para el usuario, clasificalo como \`factura_compra\`.\n`;
+    } else if (familyHint === 'purchase_credit_note') {
+        roleInstruction = `\n\nATENCION: Este documento pertenece a NOTAS CREDITO DE COMPRA. Ajusta la clasificacion asumiendo que el usuario es el ADQUIRIENTE y el proveedor es quien emite la nota credito.\nClasificalo como \`nota_credito_compra\`.\n`;
+    } else if (familyHint === 'sale_credit_note') {
+        roleInstruction = `\n\nATENCION: Este documento pertenece a NOTAS CREDITO DE VENTA. Ajusta la clasificacion asumiendo que el usuario es el EMISOR de la nota credito.\nClasificalo como \`nota_credito\`.\n`;
+    }
+
+    return `Analiza esta FACTURA COLOMBIANA y responde SOLO JSON valido.${roleInstruction}
 
 Objetivo:
+- Identificar si es "factura_venta", "factura_compra", "factura_pos", "documento_soporte", "nota_credito" o "nota_credito_compra".
+- Extraer Tipo de Operación (ej: "10 - Estándar", "20 - Nota Crédito", "Mandato", etc).
 - Extraer TODOS los datos utiles para contabilidad.
 - Si un dato no existe, devuelve cadena vacia o 0.
 - Sin markdown, sin comentarios, solo JSON.
@@ -1161,7 +1402,8 @@ Objetivo:
 
 Debe incluir exactamente este esquema (con estas claves):
 {
-  "tipoDocumento": "factura_venta",
+  "tipoDocumento": "factura_venta | factura_compra | factura_pos | documento_soporte | nota_credito | nota_credito_compra",
+  "tipoOperacion": "",
   "prefijo": "",
   "numeroFactura": "",
   "cufe": "",
@@ -1217,21 +1459,22 @@ Debe incluir exactamente este esquema (con estas claves):
 }
 
 Reglas obligatorias:
-1) Base 0% debe intentar distinguir entre exenta, excluida y no gravada.
-2) Separar bases e IVA para 5%, 8% y 19%.
-3) Extraer ReteFuente, ReteICA y ReteIVA.
-4) Validar matematica: (bases + IVAs + imp consumo - retenciones) ~= total.
-5) En cada item, baseImpuesto debe respetar cantidad x valorUnitario menos descuento.
-6) Si cantidad > 1, nunca uses valor unitario como total de linea.
-7) Cuando existan varias tarifas, consolida por linea y luego suma por porcentaje.
-8) No inventes una tabla perfecta si el PDF viene desordenado; conserva la logica numerica.
-9) Si la factura no distingue exenta/excluida/no gravada, usa exenta como fallback de 0%.
+1) Identificar tipoDocumento: nota_credito o nota_credito_compra si el titulo o tipo operacion es 20/22.
+2) Base 0% debe intentar distinguir entre exenta, excluida y no gravada.
+3) Separar bases e IVA para 5%, 8% y 19%.
+4) Extraer ReteFuente, ReteICA y ReteIVA.
+5) Validar matematica: (bases + IVAs + imp consumo - retenciones) ~= total.
+6) En cada item, baseImpuesto debe respetar cantidad x valorUnitario menos descuento.
+7) Si cantidad > 1, nunca uses valor unitario como total de linea.
+8) Cuando existan varias tarifas, consolida por linea y luego suma por porcentaje.
+9) No inventes una tabla perfecta si el PDF viene desordenado; conserva la logica numerica.
+10) Si la factura no distingue exenta/excluida/no gravada, usa exenta como fallback de 0%.
 
 Texto factura:
 ${text}`;
 }
 
-async function extractDataFromPDF(text, config = { provider: 'gemini' }) {
+async function extractDataFromPDF(text, config = { provider: 'gemini' }, metadata = {}) {
     const provider = typeof config === 'string' ? config : (config.provider || 'gemini');
 
     const geminiKey = readConfigSecret(config, 'gemini_api_key_enc', 'gemini_api_key', 'api_key_gemini') || process.env.GEMINI_API_KEY;
@@ -1239,12 +1482,12 @@ async function extractDataFromPDF(text, config = { provider: 'gemini' }) {
 
     console.log(`[EXTRACTOR] Procesando con provider: ${provider}`);
     const normalizedText = preprocessInvoiceText(text);
-    const localDian = inferDianStructuredExtraction(normalizedText);
+    const localDian = inferDianStructuredExtraction(normalizedText, metadata);
     if (localDian) {
         console.log('[EXTRACTOR] Factura DIAN estructurada resuelta sin IA.');
         return localDian;
     }
-    const prompt = buildPrompt(normalizedText);
+    const prompt = buildPrompt(normalizedText, metadata);
     const summaryFallback = inferSummaryFromText(normalizedText);
     const identifierFallback = inferCommonIdentifiers(normalizedText);
 
@@ -1259,7 +1502,10 @@ async function extractDataFromPDF(text, config = { provider: 'gemini' }) {
             return normalizeExtraction({
                 ...identifierFallback,
                 ...mergeSummaryFallback(safeParseModelJson(resText), summaryFallback),
-                extractionSource: 'ai_gemini'
+                extractionSource: 'ai_gemini',
+                sourcePath: metadata.sourcePath || '',
+                originalFilename: metadata.originalFilename || '',
+                rawText: normalizedText
             });
         }
 
@@ -1293,7 +1539,10 @@ async function extractDataFromPDF(text, config = { provider: 'gemini' }) {
             return normalizeExtraction({
                 ...identifierFallback,
                 ...mergeSummaryFallback(safeParseModelJson(resText), summaryFallback),
-                extractionSource: 'ai_groq'
+                extractionSource: 'ai_groq',
+                sourcePath: metadata.sourcePath || '',
+                originalFilename: metadata.originalFilename || '',
+                rawText: normalizedText
             });
         }
 

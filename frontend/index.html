@@ -93,10 +93,10 @@
                         </select>
                         <button class="btn-pro btn-s" onclick="retryFailedDocuments()">Reenviar fallidos</button>
                         <button class="btn-pro btn-s" onclick="cleanupHistory()">Limpiar</button>
-                        <button class="btn-pro btn-s" onclick="exportToExcel()">Excel</button>
                         <input type="file" id="fi" multiple accept=".pdf" style="display:none">
                         <input type="file" id="folder-input" multiple accept=".pdf" webkitdirectory directory style="display:none">
-                        <button class="btn-pro btn-s" onclick="document.getElementById('folder-input').click()">Carpeta</button>
+                        <button class="btn-pro btn-s" onclick="document.getElementById('folder-input').click()">📁 Carpeta</button>
+                        <button class="btn-pro btn-s" onclick="exportToExcel()">📊 Excel</button>
                         <button class="btn-pro btn-p" onclick="document.getElementById('fi').click()">PDFs</button>
                     </div>
                 </header>
@@ -105,7 +105,7 @@
                 <div class="table-wrap">
                     <table>
                         <thead>
-                            <tr><th>Estado</th><th>Fecha</th><th>NIT</th><th>Factura</th><th>Base 19</th><th>IVA 19</th><th>Base 5</th><th>IVA 5</th><th>Base 0</th><th>RT Fte</th><th>RT ICA</th><th>RT IVA</th><th>Total</th><th>Archivo / Accion</th></tr>
+                            <tr><th>Estado</th><th>Tipo</th><th>Fecha</th><th>NIT</th><th>Factura</th><th>Base 19</th><th>IVA 19</th><th>Base 5</th><th>IVA 5</th><th>Base 0</th><th>RT Fte</th><th>RT ICA</th><th>RT IVA</th><th>Total</th><th>Archivo / Accion</th></tr>
                         </thead>
                         <tbody id="m-tbody"></tbody>
                     </table>
@@ -135,7 +135,11 @@
                 <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Actor</th><th>Accion</th><th>Objeto</th><th>Detalle</th></tr></thead><tbody id="audit-tbody"></tbody></table></div>
             </div>
 
-            <div id="v-clients" class="view">
+            <div class="sidebar">
+                <header><h1>Orígenes</h1></header>
+                <div id="local-paths-list" style="margin-bottom:1.5rem"></div>
+                <button class="btn-pro btn-s" onclick="addLocalPath()" style="width:100%;margin-bottom:2rem;background:var(--accent);color:#fff">+ Vincular Carpeta</button>
+
                 <header><h1>Clientes</h1></header>
                 <div id="client-list"></div>
             </div>
@@ -198,13 +202,45 @@
             const options = teamUsers.map(user => `<option value="${user.id}" ${Number(item.assigned_to) === Number(user.id) ? 'selected' : ''}>${esc(user.name)}</option>`).join('');
             return `${fileLabel}<div style="margin-top:6px"><select class="input-pro" style="min-width:150px" onchange="assignDocument(${item.id}, this.value)">${options}</select></div>${extra ? `<div style="margin-top:6px">${extra}</div>` : ''}`;
         }
+        async function loadLocalPaths() {
+            if (!me) return;
+            const paths = await api('/api/sync/paths');
+            if (!paths) return;
+            const container = document.getElementById('local-paths-list');
+            container.innerHTML = paths.length === 0 ? '<div style="font-size:0.8rem;color:var(--text-s);padding:0 0.5rem">Sin carpetas vinculadas</div>' : paths.map(p => `
+                <div class="client-item" style="display:flex;flex-direction:column;gap:0.3rem;padding:0.7rem;border-radius:8px">
+                    <div style="font-weight:600;font-size:0.85rem;display:flex;justify-content:space-between;align-items:center">
+                        ${esc(p.name)}
+                        <span onclick="deleteLocalPath(${p.id})" style="cursor:pointer;color:var(--err);font-size:1rem">&times;</span>
+                    </div>
+                    <div style="font-size:0.7rem;color:var(--text-s);word-break:break-all">${esc(p.path)}</div>
+                    <button class="btn-pro btn-s" onclick="runSync(${p.id})" style="margin-top:0.4rem;padding:0.3rem">Sincronizar</button>
+                </div>
+            `).join('');
+        }
+        async function addLocalPath() {
+            const path = prompt("Ruta completa de la carpeta:");
+            if (!path) return;
+            const name = prompt("Nombre descriptivo:", "Descargas PRUEBA IA");
+            await api('/api/sync/paths', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, name }) });
+            loadLocalPaths();
+        }
+        async function deleteLocalPath(id) {
+            if (!confirm("¿Eliminar vínculo?")) return;
+            await api(`/api/sync/paths/${id}`, { method: 'DELETE' });
+            loadLocalPaths();
+        }
+        async function runSync(id) {
+            const res = await api('/api/sync/folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+            if (res?.ok) { alert(res.message); loadMain(); loadLocalPaths(); }
+        }
         async function loadMain() {
             await ensureTeamUsers();
             const scope = canManageCompany() ? document.getElementById('scope-filter').value : 'mine';
             const data = await api(`/api/data?scope=${encodeURIComponent(scope)}`);
             if (!data) return;
             currentData = Array.isArray(data) ? data : [];
-            let b19=0,v19=0,b5=0,v5=0,b0=0,rf=0,ri=0,rv=0,st=0,tot=0,pending=0;
+            let b19=0,v19=0,b5=0,v5=0,b0=0,rf=0,ri=0,rv=0,st=0,tot=0,soporteTot=0,ncTot=0,pending=0;
             currentData.forEach(item => {
                 if (item.status === 'completed' && item.extracted_data) {
                     try {
@@ -213,14 +249,24 @@
                         const i19 = ivs.find(x => x.porcentaje === 19) || { base:0, valor:0 };
                         const i5 = ivs.find(x => x.porcentaje === 5) || { base:0, valor:0 };
                         const i0 = ivs.find(x => x.porcentaje === 0) || { base:0, valor:0 };
-                        b19 += Number(i19.base||0); v19 += Number(i19.valor||0); b5 += Number(i5.base||0); v5 += Number(i5.valor||0); b0 += Number(i0.base||0);
-                        rf += Number(ed.reteFuente||0); ri += Number(ed.reteIca||0); rv += Number(ed.reteIva||0); st += Number(ed.subtotal||0); tot += Number(ed.total||0);
+                        
+                        const itemTotal = Number(ed.total||0);
+                        if (ed.tipoDocumento === 'documento_soporte') {
+                            soporteTot += itemTotal;
+                        } else if (ed.tipoDocumento === 'nota_credito' || String(ed.tipoOperacion).startsWith('20') || String(ed.tipoOperacion).startsWith('22')) {
+                            ncTot += itemTotal;
+                            tot -= itemTotal; // RESTA del total general
+                        } else {
+                            b19 += Number(i19.base||0); v19 += Number(i19.valor||0); b5 += Number(i5.base||0); v5 += Number(i5.valor||0); b0 += Number(i0.base||0);
+                            rf += Number(ed.reteFuente||0); ri += Number(ed.reteIca||0); rv += Number(ed.reteIva||0); st += Number(ed.subtotal||0); 
+                            tot += itemTotal;
+                        }
                     } catch (_) {}
                 } else if (item.status === 'pending' || item.status === 'processing') pending += 1;
             });
             if (pending > 0 && !isPolling) startPolling(); if (pending === 0) isPolling = false;
-            document.getElementById('row-kpis-1').innerHTML = `<div class="kpi-card"><div class="kpi-label">Subtotal</div><div class="kpi-val">${cur(st)}</div></div><div class="kpi-card"><div class="kpi-label">Base 19</div><div class="kpi-val">${cur(b19)}</div></div><div class="kpi-card"><div class="kpi-label">IVA 19</div><div class="kpi-val">${cur(v19)}</div></div><div class="kpi-card"><div class="kpi-label">Base 5</div><div class="kpi-val">${cur(b5)}</div></div><div class="kpi-card"><div class="kpi-label">IVA 5</div><div class="kpi-val">${cur(v5)}</div></div>`;
-            document.getElementById('row-kpis-2').innerHTML = `<div class="kpi-card"><div class="kpi-label">Base 0</div><div class="kpi-val">${cur(b0)}</div></div><div class="kpi-card"><div class="kpi-label">ReteFuente</div><div class="kpi-val">${cur(rf)}</div></div><div class="kpi-card"><div class="kpi-label">ReteICA</div><div class="kpi-val">${cur(ri)}</div></div><div class="kpi-card"><div class="kpi-label">ReteIVA</div><div class="kpi-val">${cur(rv)}</div></div><div class="kpi-card"><div class="kpi-label">Total</div><div class="kpi-val">${cur(tot)}</div></div>`;
+            document.getElementById('row-kpis-1').innerHTML = `<div class="kpi-card"><div class="kpi-label">Subtotal</div><div class="kpi-val">${cur(st)}</div></div><div class="kpi-card"><div class="kpi-label">Base 19</div><div class="kpi-val">${cur(b19)}</div></div><div class="kpi-card"><div class="kpi-label">IVA 19</div><div class="kpi-val">${cur(v19)}</div></div><div class="kpi-card" style="border-color:var(--err)"><div class="kpi-label" style="color:var(--err)">Nota Crédito (-)</div><div class="kpi-val">-${cur(ncTot)}</div></div><div class="kpi-card"><div class="kpi-label">IVA 5</div><div class="kpi-val">${cur(v5)}</div></div>`;
+            document.getElementById('row-kpis-2').innerHTML = `<div class="kpi-card"><div class="kpi-label">Base 0</div><div class="kpi-val">${cur(b0)}</div></div><div class="kpi-card"><div class="kpi-label">ReteFuente</div><div class="kpi-val">${cur(rf)}</div></div><div class="kpi-card"><div class="kpi-label">ReteICA</div><div class="kpi-val">${cur(ri)}</div></div><div class="kpi-card" style="border-color:var(--accent)"><div class="kpi-label" style="color:var(--accent)">Soporte (DS)</div><div class="kpi-val">${cur(soporteTot)}</div></div><div class="kpi-card"><div class="kpi-label">Total Gral</div><div class="kpi-val">${cur(tot)}</div></div>`;
             document.getElementById('m-tbody').innerHTML = currentData.map(item => {
                 if (item.status === 'completed' && item.extracted_data) {
                     try {
@@ -229,11 +275,23 @@
                         const i19 = ivs.find(x => x.porcentaje === 19) || { base:0, valor:0 };
                         const i5 = ivs.find(x => x.porcentaje === 5) || { base:0, valor:0 };
                         const i0 = ivs.find(x => x.porcentaje === 0) || { base:0, valor:0 };
-                        return `<tr><td><span class="st-tag" style="background:rgba(16,185,129,0.1);color:var(--succ)">LISTO</span></td><td>${esc(new Date(item.created_at).toLocaleDateString())}</td><td>${esc(ed.nitEmisor||'-')}</td><td>${esc(ed.numeroFactura||'-')}</td><td>${cur(i19.base)}</td><td>${cur(i19.valor)}</td><td>${cur(i5.base)}</td><td>${cur(i5.valor)}</td><td>${cur(i0.base)}</td><td>${cur(ed.reteFuente)}</td><td>${cur(ed.reteIca)}</td><td>${cur(ed.reteIva)}</td><td>${cur(ed.total)}</td><td>${renderAssignment(item)}</td></tr>`;
-                    } catch (_) { return '<tr><td colspan="14">Error de formato</td></tr>'; }
+                        const typeLabels = { 'factura_venta': 'VENTA', 'factura_pos': 'POS', 'documento_soporte': 'SOPORTE', 'nota_credito': 'N.CRÉDITO' };
+                        const typeColors = { 'factura_venta': 'var(--succ)', 'factura_pos': 'var(--warn)', 'documento_soporte': 'var(--accent)', 'nota_credito': 'var(--err)' };
+                        
+                        let typeText = typeLabels[ed.tipoDocumento] || 'OTRO';
+                        if (String(ed.tipoOperacion).includes('Mandato')) typeText = 'MANDATO';
+                        if (String(ed.tipoOperacion).includes('Transporte')) typeText = 'TRANSP.';
+                        if (String(ed.tipoOperacion).includes('SinAporte')) typeText = 'S.APORTE';
+
+                        const typeColor = typeColors[ed.tipoDocumento] || 'var(--text-s)';
+                        const totalDisp = ed.tipoDocumento === 'nota_credito' ? `-${cur(ed.total)}` : cur(ed.total);
+                        const totalStyle = ed.tipoDocumento === 'nota_credito' ? 'color:var(--err);font-weight:800' : '';
+
+                        return `<tr><td><span class="st-tag" style="background:rgba(16,185,129,0.1);color:var(--succ)">LISTO</span></td><td><span class="st-tag" style="background:rgba(255,255,255,0.05);color:${typeColor}">${typeText}</span></td><td>${esc(new Date(item.created_at).toLocaleDateString())}</td><td>${esc(ed.nitEmisor||'-')}</td><td>${esc(ed.numeroFactura||'-')}</td><td>${cur(i19.base)}</td><td>${cur(i19.valor)}</td><td>${cur(i5.base)}</td><td>${cur(i5.valor)}</td><td>${cur(i0.base)}</td><td>${cur(ed.reteFuente)}</td><td>${cur(ed.reteIca)}</td><td>${cur(ed.reteIva)}</td><td style="${totalStyle}">${totalDisp}</td><td>${renderAssignment(item)}</td></tr>`;
+                    } catch (_) { return '<tr><td colspan="15">Error de formato</td></tr>'; }
                 }
-                if (item.status === 'error') return `<tr><td><span class="st-tag" style="background:rgba(239,68,68,0.1);color:var(--err)">ERROR</span></td><td colspan="12">${esc(item.error_message || 'Desconocido')}</td><td>${renderAssignment(item, actionButton(`Reenviar (${Number(item.retry_count||0)}/${Number(item.max_retries||3)})`, `retryDocument(${item.id})`))}</td></tr>`;
-                return `<tr><td><span class="st-tag" style="background:rgba(124,58,237,0.1);color:#a78bfa">COLA</span></td><td colspan="12">Analisis AI en curso...</td><td>${renderAssignment(item)}</td></tr>`;
+                if (item.status === 'error') return `<tr><td><span class="st-tag" style="background:rgba(239,68,68,0.1);color:var(--err)">ERROR</span></td><td colspan="13">${esc(item.error_message || 'Desconocido')}</td><td>${renderAssignment(item, actionButton(`Reenviar (${Number(item.retry_count||0)}/${Number(item.max_retries||3)})`, `retryDocument(${item.id})`))}</td></tr>`;
+                return `<tr><td><span class="st-tag" style="background:rgba(124,58,237,0.1);color:#a78bfa">COLA</span></td><td colspan="13">Analisis AI en curso...</td><td>${renderAssignment(item)}</td></tr>`;
             }).join('');
         }
         function startPolling() { isPolling = true; setTimeout(async () => { if (!isPolling) return; await loadMain(); startPolling(); }, 3000); }
@@ -244,8 +302,8 @@
         async function exportToExcel() {
             if (currentData.length === 0) return alert('Nada que exportar.');
             const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Reporte');
-            ws.columns = [{header:'Fecha',key:'f',width:12},{header:'Emisor',key:'e',width:25},{header:'NIT',key:'n',width:15},{header:'Factura',key:'fac',width:15},{header:'Total',key:'tot',width:15}];
-            currentData.filter(x => x.status === 'completed' && x.extracted_data).forEach(item => { try { const ed = typeof item.extracted_data === 'string' ? JSON.parse(item.extracted_data) : item.extracted_data; ws.addRow({ f:new Date(item.created_at).toLocaleDateString(), e:ed.emisor, n:ed.nitEmisor, fac:ed.numeroFactura, tot:ed.total }); } catch (_) {} });
+            ws.columns = [{header:'Fecha',key:'f',width:12},{header:'Tipo',key:'t',width:12},{header:'Emisor',key:'e',width:25},{header:'NIT',key:'n',width:15},{header:'Factura',key:'fac',width:15},{header:'Total',key:'tot',width:15}];
+            currentData.filter(x => x.status === 'completed' && x.extracted_data).forEach(item => { try { const ed = typeof item.extracted_data === 'string' ? JSON.parse(item.extracted_data) : item.extracted_data; ws.addRow({ f:new Date(item.created_at).toLocaleDateString(), t:ed.tipoDocumento, e:ed.emisor, n:ed.nitEmisor, fac:ed.numeroFactura, tot:ed.total }); } catch (_) {} });
             const buf = await wb.xlsx.writeBuffer(); const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'Reporte_Contable.xlsx'; link.click();
         }
         async function loadTeam() {
@@ -280,6 +338,17 @@
             for (const file of fileList) { formData.append('pdfs', file); relativePaths.push(useRelativePath ? (file.webkitRelativePath || file.name) : file.name); }
             formData.append('relative_paths', JSON.stringify(relativePaths)); formData.append('max_retries', '3');
             const result = await api('/api/upload', { method:'POST', body:formData }); if (result?.error) alert(result.error); await loadMain();
+        }
+        async function syncFolder() {
+            const p = prompt("Ingresa la ruta completa de la carpeta local a sincronizar:", "C:\\Users\\SERVIDO KNS PLUS\\Downloads\\PRUEBA IA");
+            if (!p) return;
+            const res = await api('/api/sync/folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p }) });
+            if (res && res.ok) {
+                alert(res.message);
+                loadMain();
+            } else {
+                alert("Error: " + (res?.error || "No se pudo sincronizar"));
+            }
         }
         document.getElementById('fi').onchange = async e => { await uploadSelection(e.target.files, false); e.target.value=''; };
         document.getElementById('folder-input').onchange = async e => { await uploadSelection(e.target.files, true); e.target.value=''; };

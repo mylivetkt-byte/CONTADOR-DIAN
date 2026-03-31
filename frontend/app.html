@@ -322,7 +322,8 @@ tbody tr:hover{
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
   gap:16px;
-  margin-bottom:20px
+  margin-bottom:20px;
+  min-height: 100px;
 }
 .card{
   position:relative;
@@ -439,6 +440,11 @@ tbody tr:hover{
       <h2>Contador</h2>
       <p>Tablero de captura, revision y control contable para lotes variables de facturas colombianas.</p>
     </div>
+    
+    <div class="nav-group">Orígenes Locales</div>
+    <div id="local-paths-list" style="margin-bottom:0.8rem"></div>
+    <div class="nav-item" onclick="addLocalPath()" style="background:rgba(255,255,255,.03);color:var(--accent);font-weight:700">+ Vincular Carpeta</div>
+
     <div class="nav-group">Workspace</div>
     <div class="nav-item" onclick="setView('main')">Inbox</div>
     <div class="nav-item" onclick="setView('account')">Mi Cuenta</div>
@@ -473,10 +479,6 @@ tbody tr:hover{
           <button class="btn btn-s" onclick="reprocessCompleted()">Reprocesar completados</button>
           <button class="btn btn-s" onclick="cleanup()">Limpiar</button>
           <button class="btn btn-s" onclick="exportExcel()">Excel</button>
-          <input type="file" id="fi" multiple accept=".pdf" style="display:none">
-          <input type="file" id="folder" multiple accept=".pdf" webkitdirectory directory style="display:none">
-          <button class="btn btn-s" onclick="document.getElementById('folder').click()">Carpeta</button>
-          <button class="btn btn-p" onclick="document.getElementById('fi').click()">PDFs</button>
         </div>
         <div class="status-grid">
           <div class="status-pill">
@@ -501,6 +503,22 @@ tbody tr:hover{
           </div>
         </div>
       </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:15px;align-items:center;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:15px;">
+        <button id="tab-sale_invoice" class="btn btn-p" onclick="setDocTab('sale_invoice')">Ventas / POS</button>
+        <button id="tab-sale_credit_note" class="btn btn-s" onclick="setDocTab('sale_credit_note')">NC Venta</button>
+        <button id="tab-purchase_invoice" class="btn btn-s" onclick="setDocTab('purchase_invoice')">Compras / Soporte</button>
+        <button id="tab-purchase_credit_note" class="btn btn-s" onclick="setDocTab('purchase_credit_note')">NC Compra</button>
+        
+        <div style="margin-left:auto; display:flex; gap:8px;">
+           <span style="font-size:0.75rem; color:var(--text-d); align-self:center; margin-right:10px;">Subir a pestaña activa:</span>
+           <input type="file" id="fi" multiple accept=".pdf" style="display:none">
+           <input type="file" id="folder" multiple accept=".pdf" webkitdirectory directory style="display:none">
+           <button class="btn btn-s" style="border:1px solid rgba(255,255,255,0.2)" onclick="document.getElementById('folder').click()">+ Carpeta</button>
+           <button class="btn btn-p" onclick="document.getElementById('fi').click()">+ PDFs</button>
+        </div>
+      </div>
+
       <div class="kpi" id="kpis"></div>
       <div class="panel" style="padding:0;overflow:hidden">
         <div class="section-title" style="padding:22px 22px 0 22px">
@@ -578,6 +596,69 @@ let docs = [];
 let teamUsers = [];
 let docsRefreshHandle = null;
 let expandedDocs = new Set();
+let currentDocTab = 'sale_invoice';
+let visibleDocs = [];
+let visibleCompletedDocs = [];
+
+const DOC_TAB_CONFIG = {
+  sale_invoice: {
+    label: 'Facturas de Venta Electronica y POS',
+    sheet: 'Ventas_POS',
+    file: 'Reporte_Facturas_Venta_POS'
+  },
+  sale_credit_note: {
+    label: 'Notas Credito de Venta',
+    sheet: 'NC_Venta',
+    file: 'Reporte_Notas_Credito_Venta'
+  },
+  purchase_invoice: {
+    label: 'Facturas de Compra y Documento Soporte',
+    sheet: 'Compras_Soporte',
+    file: 'Reporte_Facturas_Compra_Documento_Soporte'
+  },
+  purchase_credit_note: {
+    label: 'Notas Credito de Compra',
+    sheet: 'NC_Compra',
+    file: 'Reporte_Notas_Credito_Compra'
+  }
+};
+
+function getCurrentTabConfig() {
+  return DOC_TAB_CONFIG[currentDocTab] || DOC_TAB_CONFIG.sale_invoice;
+}
+
+function mapTipoDocumentoToFamily(tipoDocumento = '') {
+  const type = String(tipoDocumento || '').toLowerCase();
+  if (type === 'nota_credito_compra') return 'purchase_credit_note';
+  if (type === 'nota_credito') return 'sale_credit_note';
+  if (type === 'documento_soporte' || type.includes('compra')) return 'purchase_invoice';
+  return 'sale_invoice';
+}
+
+function inferDocumentFamilyFromItem(item = {}) {
+  let extracted = item.extracted_data;
+  if (typeof extracted === 'string') {
+    try { extracted = JSON.parse(extracted); } catch (_) { extracted = null; }
+  }
+  if (extracted && typeof extracted === 'object') {
+    return extracted.documentFamily || mapTipoDocumentoToFamily(extracted.tipoDocumento);
+  }
+
+  const sourcePath = String(item.source_path || item.original_filename || '').toUpperCase();
+  if (sourcePath.includes('NC_COMPRA') || sourcePath.includes('NC COMPRAS') || sourcePath.includes('NC COMPRA')) return 'purchase_credit_note';
+  if (sourcePath.includes('NC_VENTA') || sourcePath.includes('NC VENTA')) return 'sale_credit_note';
+  if (sourcePath.includes('COMPRA') || sourcePath.includes('SOPORTE')) return 'purchase_invoice';
+  return 'sale_invoice';
+}
+
+function setDocTab(tab) {
+  currentDocTab = tab;
+  ['sale_invoice', 'sale_credit_note', 'purchase_invoice', 'purchase_credit_note'].forEach(t => {
+     const el = document.getElementById('tab-' + t);
+     if (el) el.className = (tab === t) ? 'btn btn-p' : 'btn btn-s';
+  });
+  loadDocs();
+}
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -638,6 +719,22 @@ function formatEta(seconds) {
   const mins = Math.floor(total / 60);
   const secs = total % 60;
   return `${mins}m ${secs}s`;
+}
+function getObservedSecondsPerDoc(queueStatus = null) {
+  const runtime = queueStatus?.runtime || {};
+  const timing = queueStatus?.timing || {};
+  const runtimeDelaySeconds = Math.max(0, Number(runtime.interDocumentDelayMs || 0) / 1000);
+  const measuredSeconds = Math.max(0, Number(timing.avg_processing_ms || 0) / 1000);
+  const measuredAiSeconds = Math.max(0, Number(timing.avg_ai_processing_ms || 0) / 1000);
+  const sampleSize = Number(timing.sample_size || 0);
+  const baseMeasured = measuredAiSeconds > 0 ? measuredAiSeconds : measuredSeconds;
+  if (baseMeasured > 0 && sampleSize > 0) {
+    return Math.max(1, Math.round(baseMeasured + runtimeDelaySeconds));
+  }
+  if (measuredSeconds > 0) {
+    return Math.max(1, Math.round(measuredSeconds + runtimeDelaySeconds));
+  }
+  return Math.max(2, Math.round(4 + runtimeDelaySeconds));
 }
 function startDocsAutoRefresh() {
   if (docsRefreshHandle) clearInterval(docsRefreshHandle);
@@ -736,6 +833,7 @@ function parseExtraction(item) {
 
   return {
     documentId: item.id,
+    documentFamily: ed.documentFamily || mapTipoDocumentoToFamily(ed.tipoDocumento),
     extractionSource: ed.extractionSource || 'desconocido',
     nit: ed.nitEmisor || ed.nitAdquirente || ed.nit || '',
     factura: ed.numeroFactura || [ed.prefijo, ed.numero].filter(Boolean).join('-') || invoiceFromFile || ed.cufe || '',
@@ -755,27 +853,82 @@ function parseExtraction(item) {
     reteIca,
     impuestoConsumo,
     diferenciaTotal: diferencia,
-    detalleProductos
+    detalleProductos,
+    tipoDocumento: ed.tipoDocumento || 'factura_venta',
+    tipoOperacion: ed.tipoOperacion || ''
   };
 }
 
-function sourceLabel(source) {
-  const src = String(source || '').toLowerCase();
-  if (src.includes('dian')) return 'Parser DIAN';
-  if (src.includes('gemini')) return 'IA Gemini';
-  if (src.includes('groq')) return 'IA Groq';
-  if (src.includes('desconocido')) return 'Sin fuente';
-  return 'IA';
+function sourceLabel(src) {
+  const s = String(src || '').toLowerCase();
+  if (s === 'dian_estandar') return 'DIAN Estándar';
+  if (s === 'dian_pos') return 'DIAN POS';
+  if (s === 'dian_soporte') return 'DIAN Soporte';
+  if (s === 'dian_nota_credito') return 'DIAN N. Crédito';
+  if (s === 'dian_mandato') return 'DIAN Mandato';
+  if (s === 'dian_transporte') return 'DIAN Transp';
+  if (s === 'dian_sin_aporte') return 'DIAN S.Aporte';
+  if (s.includes('dian')) return 'DIAN Local';
+  if (s.includes('gemini')) return 'IA Gemini';
+  if (s.includes('groq')) return 'IA Groq';
+  return 'Procesado IA';
 }
 
-function sourceBadgeHtml(source) {
-  const src = String(source || '').toLowerCase();
-  const style = src.includes('dian')
-    ? 'background:rgba(61,217,178,.12);color:#79f0d0;border:1px solid rgba(61,217,178,.24);'
-    : src.includes('desconocido')
-      ? 'background:rgba(255,255,255,.08);color:#cbd7e5;border:1px solid rgba(255,255,255,.12);'
-      : 'background:rgba(255,179,71,.12);color:#ffd36c;border:1px solid rgba(255,179,71,.24);';
-  return `<span style="display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;font-size:.68rem;font-weight:800;letter-spacing:.04em;${style}">${sourceLabel(source)}</span>`;
+function sourceBadgeHtml(ed = {}) {
+  const source = (typeof ed === 'string') ? ed : (ed?.extractionSource || 'desconocido');
+  const label = sourceLabel(source);
+  let style = 'background:rgba(255,179,71,.12);color:#ffd36c;border:1px solid rgba(255,179,71,.24);';
+  
+  if (source.includes('dian')) {
+    if (source.includes('nota_credito')) style = 'background:#450a0a;color:#f87171;border:1px solid #7f1d1d;';
+    else if (source.includes('soporte')) style = 'background:#2e1065;color:#c084fc;border:1px solid #581c87;';
+    else if (source.includes('pos')) style = 'background:#451a03;color:#fbbf24;border:1px solid #78350f;';
+    else if (source.includes('mandato')) style = 'background:#172554;color:#60a5fa;border:1px solid #1e3a8a;';
+    else if (source.includes('transporte')) style = 'background:#064e3b;color:#34d399;border:1px solid #065f46;';
+    else style = 'background:rgba(0,128,128,.15);color:#4ade80;border:1px solid rgba(0,128,128,.3);';
+  } else if (source.includes('desconocido')) {
+    style = 'background:rgba(255,255,255,.08);color:#cbd7e5;border:1px solid rgba(255,255,255,.12);';
+  }
+
+  return `<div style="display:inline-flex;align-items:center;padding:4px 10px;border-radius:6px;font-size:.7rem;font-weight:900;letter-spacing:.04em;${style}">${label}</div>`;
+}
+
+async function loadLocalPaths() {
+  if (!me) return;
+  const paths = await api('/api/sync/paths');
+  if (!paths) return;
+  const container = document.getElementById('local-paths-list');
+  if (!container) return;
+  container.innerHTML = paths.length === 0 ? '<div style="font-size:0.7rem;color:var(--text-d);padding:0 8px">Sin carpetas</div>' : paths.map(p => `
+    <div class="nav-item" style="padding:10px;font-size:0.8rem;display:flex;flex-direction:column;gap:4px">
+      <div style="display:flex;justify-content:space-between">
+        <span style="font-weight:700;color:var(--text)">${esc(p.name)}</span>
+        <span onclick="deleteLocalPath(${p.id})" style="color:var(--danger);cursor:pointer">×</span>
+      </div>
+      <div style="font-size:0.65rem;color:var(--text-d);word-break:break-all">${esc(p.path)}</div>
+      <button class="btn btn-s" onclick="runSync(${p.id})" style="margin-top:6px;min-height:30px;font-size:0.7rem;padding:0 8px">Sincronizar</button>
+    </div>
+  `).join('');
+}
+
+async function addLocalPath() {
+  const path = prompt("Ruta completa de la carpeta local:");
+  if (!path) return;
+  const name = prompt("Nombre descriptivo:", "Descargas PRUEBA IA");
+  await api('/api/sync/paths', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, name }) });
+  loadLocalPaths();
+}
+
+async function deleteLocalPath(id) {
+  if (!confirm("¿Eliminar vínculo?")) return;
+  const res = await api(`/api/sync/paths/${id}`, { method: 'DELETE' });
+  loadLocalPaths();
+}
+
+async function runSync(id) {
+  const res = await api('/api/sync/folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+  if (res?.ok) { alert(res.message); loadDocs(); loadLocalPaths(); }
+  else if (res?.error) alert(res.error);
 }
 
 function toggleDocDetail(id) {
@@ -834,11 +987,56 @@ function productTableHtml(ed) {
 }
 
 function buildTotals(items) {
-  const t = { totalFactura: 0, baseExento: 0, base5: 0, iva5: 0, base8: 0, iva8: 0, base19: 0, iva19: 0, reteFuente: 0, reteIva: 0, reteIca: 0, impuestoConsumo: 0, diferenciaTotal: 0 };
+  const t = { totalVentas: 0, totalCompras: 0, totalNotaCreditoVenta: 0, totalNotaCreditoCompra: 0, totalSoporte: 0, baseExento: 0, base5: 0, iva5: 0, base8: 0, iva8: 0, base19: 0, iva19: 0, reteFuente: 0, reteIva: 0, reteIca: 0, impuestoConsumo: 0, diferenciaTotal: 0 };
   for (const it of items) {
-    t.totalFactura += it.totalFactura; t.baseExento += it.baseExento; t.base5 += it.base5; t.iva5 += it.iva5;
-    t.base8 += it.base8; t.iva8 += it.iva8; t.base19 += it.base19; t.iva19 += it.iva19;
-    t.reteFuente += it.reteFuente; t.reteIva += it.reteIva; t.reteIca += it.reteIca; t.impuestoConsumo += it.impuestoConsumo; t.diferenciaTotal += it.diferenciaTotal;
+    if (it.tipoDocumento === 'nota_credito') {
+      t.totalNotaCreditoVenta += it.totalFactura;
+      t.totalVentas -= it.totalFactura;
+      // Las bases e impuestos de NC se restan
+      t.baseExento -= it.baseExento; t.base5 -= it.base5; t.iva5 -= it.iva5;
+      t.base8 -= it.base8; t.iva8 -= it.iva8; t.base19 -= it.base19; t.iva19 -= it.iva19;
+    } else if (it.tipoDocumento === 'nota_credito_compra') {
+      t.totalNotaCreditoCompra += it.totalFactura;
+      t.totalCompras -= it.totalFactura;
+      // En compras también restan a la base de compras, pero sumaremos bases conjuntas por simplicidad
+      t.baseExento -= it.baseExento; t.base5 -= it.base5; t.iva5 -= it.iva5;
+      t.base8 -= it.base8; t.iva8 -= it.iva8; t.base19 -= it.base19; t.iva19 -= it.iva19;
+    } else if (it.tipoDocumento === 'documento_soporte') {
+      t.totalSoporte += it.totalFactura;
+      t.totalCompras += it.totalFactura; // Documento soporte es una compra
+    } else if (String(it.tipoDocumento || '').includes('compra')) {
+      t.totalCompras += it.totalFactura;
+      t.baseExento += it.baseExento; t.base5 += it.base5; t.iva5 += it.iva5;
+      t.base8 += it.base8; t.iva8 += it.iva8; t.base19 += it.base19; t.iva19 += it.iva19;
+      t.reteFuente += it.reteFuente; t.reteIva += it.reteIva; t.reteIca += it.reteIca; t.impuestoConsumo += it.impuestoConsumo; t.diferenciaTotal += it.diferenciaTotal;
+    } else {
+      // Por defecto es Venta
+      t.totalVentas += it.totalFactura; t.baseExento += it.baseExento; t.base5 += it.base5; t.iva5 += it.iva5;
+      t.base8 += it.base8; t.iva8 += it.iva8; t.base19 += it.base19; t.iva19 += it.iva19;
+      t.reteFuente += it.reteFuente; t.reteIva += it.reteIva; t.reteIca += it.reteIca; t.impuestoConsumo += it.impuestoConsumo; t.diferenciaTotal += it.diferenciaTotal;
+    }
+  }
+  t.totalFactura = t.totalVentas; // Retrocompatibilidad variables si es necesario
+  return t;
+}
+
+function buildFamilyTotals(items) {
+  const t = { totalPrincipal: 0, totalSoporte: 0, baseExento: 0, base5: 0, iva5: 0, base8: 0, iva8: 0, base19: 0, iva19: 0, reteFuente: 0, reteIva: 0, reteIca: 0, impuestoConsumo: 0, diferenciaTotal: 0 };
+  for (const it of items) {
+    t.totalPrincipal += it.totalFactura;
+    if (it.tipoDocumento === 'documento_soporte') t.totalSoporte += it.totalFactura;
+    t.baseExento += it.baseExento;
+    t.base5 += it.base5;
+    t.iva5 += it.iva5;
+    t.base8 += it.base8;
+    t.iva8 += it.iva8;
+    t.base19 += it.base19;
+    t.iva19 += it.iva19;
+    t.reteFuente += it.reteFuente;
+    t.reteIva += it.reteIva;
+    t.reteIca += it.reteIca;
+    t.impuestoConsumo += it.impuestoConsumo;
+    t.diferenciaTotal += it.diferenciaTotal;
   }
   return t;
 }
@@ -884,23 +1082,28 @@ async function loadQueueStatus() {
   if (!d || !Array.isArray(d.counts)) return;
   const map = Object.fromEntries(d.counts.map((x) => [x.status, Number(x.total || 0)]));
   const runtime = d.runtime || {};
+  const timing = d.timing || {};
   const pending = map.pending || 0;
   const processing = map.processing || 0;
   const completed = map.completed || 0;
-  const avgSecondsPerDoc = Number(runtime.maxConcurrent || 1) > 1 ? 14 : 18;
+  const avgSecondsPerDoc = getObservedSecondsPerDoc(d);
   const totalActive = pending + processing;
   const totalBatch = totalActive + completed;
   let extra = 'Lista';
-  let etaText = totalActive > 0 ? `Tiempo estimado: ${formatEta(totalActive * avgSecondsPerDoc)} para ${totalActive} documento(s).` : 'Sin carga activa.';
+  let etaText = totalActive > 0
+    ? `Tiempo estimado: ${formatEta(totalActive * avgSecondsPerDoc)} para ${totalActive} documento(s) usando promedio real de ${formatEta(avgSecondsPerDoc)} por factura.`
+    : 'Sin carga activa.';
   let etaPercent = totalBatch > 0 ? (completed / totalBatch) * 100 : 0;
-  let etaMeta = totalBatch > 0 ? `${completed}/${totalBatch} procesadas` : '0%';
+  let etaMeta = totalBatch > 0
+    ? `${completed}/${totalBatch} procesadas${Number(timing.sample_size || 0) > 0 ? ` · muestra ${Number(timing.sample_size)} docs` : ''}`
+    : '0%';
   if (runtime.paused && runtime.pauseUntil) {
     const secs = Math.max(1, Math.ceil((Number(runtime.pauseUntil) - Date.now()) / 1000));
     extra = `Pausada por rate limit, reintenta en ${secs}s`;
     etaText = totalActive > 0 ? `Pausa activa por rate limit. Reanuda en ${secs}s y luego tardaria aprox ${formatEta(totalActive * avgSecondsPerDoc)}.` : `Pausa activa por rate limit. Reintenta en ${secs}s.`;
     etaMeta = totalBatch > 0 ? `${completed}/${totalBatch} procesadas · pausa ${secs}s` : `Pausa ${secs}s`;
   } else if (runtime.isRunning) {
-    extra = 'Procesando una a una';
+    extra = `Procesando con promedio ${formatEta(avgSecondsPerDoc)} por factura`;
   }
   setQueueStatus(`Cola | pending: ${pending} | processing: ${processing} | error: ${map.error || 0} | completed: ${map.completed || 0} | ${extra}`, totalActive + (map.error || 0) > 0 || runtime.paused);
   setEtaStatus(etaText, false);
@@ -914,11 +1117,15 @@ async function loadDocs() {
   const d = await api('/api/data?scope=' + encodeURIComponent(scope));
   if (!d) return;
   docs = Array.isArray(d) ? d : [];
-  setSessionStatus(`Sesion: ${me.email} | Empresa ${me.company_id} | Vista ${scope} | Registros ${docs.length} | Actualizado ${new Date().toLocaleTimeString()}`);
+
+  const filteredDocs = docs.filter((item) => inferDocumentFamilyFromItem(item) === currentDocTab);
+  visibleDocs = filteredDocs;
+
+  setSessionStatus(`Sesion: ${me.email} | Empresa ${me.company_id} | Vista ${scope} | ${getCurrentTabConfig().label} | Registros ${filteredDocs.length} | Actualizado ${new Date().toLocaleTimeString()}`);
 
   const completed = [];
   let err = 0, pend = 0;
-  for (const item of docs) {
+  for (const item of filteredDocs) {
     if (item.status === 'error') err += 1;
     if (item.status === 'pending' || item.status === 'processing') pend += 1;
     if (item.status === 'completed') {
@@ -926,15 +1133,26 @@ async function loadDocs() {
       if (parsed) completed.push(parsed);
     }
   }
-  const totals = buildTotals(completed);
+  visibleCompletedDocs = completed;
+  const totals = buildFamilyTotals(completed);
   const noCuadran = completed.filter((x) => Math.abs(x.diferenciaTotal) > 1).length;
 
-  document.getElementById('kpis').innerHTML = [
-    kpiCard('Documentos', docs.length),
-    kpiCard('Completados', completed.length),
-    kpiCard('Pendientes', pend),
-    kpiCard('Errores', err),
-    kpiCard('Total Factura', cur(totals.totalFactura)),
+  const primaryLabelByTab = {
+    sale_invoice: 'Total Ventas / POS',
+    sale_credit_note: 'Total NC Venta',
+    purchase_invoice: 'Total Compras / Soporte',
+    purchase_credit_note: 'Total NC Compra'
+  };
+
+  const dynamicKpis = [
+    kpiCard(primaryLabelByTab[currentDocTab] || 'Total', cur(totals.totalPrincipal))
+  ];
+  if (currentDocTab === 'purchase_invoice') {
+    dynamicKpis.push(kpiCard('Documento Soporte', cur(totals.totalSoporte)));
+  }
+
+  dynamicKpis.push(
+    kpiCard('Comp/Pend', `${completed.length}/${pend}`),
     kpiCard('Base Exento', cur(totals.baseExento)),
     kpiCard('Base IVA 5', cur(totals.base5)),
     kpiCard('IVA 5', cur(totals.iva5)),
@@ -948,15 +1166,20 @@ async function loadDocs() {
     kpiCard('Imp Consumo', cur(totals.impuestoConsumo)),
     kpiCard('Dif Neta', cur(totals.diferenciaTotal)),
     kpiCard('No Cuadran', noCuadran)
-  ].join('');
+  );
 
-  document.getElementById('docs').innerHTML = docs.map((x) => {
+  document.getElementById('kpis').innerHTML = dynamicKpis.join('');
+
+  document.getElementById('docs').innerHTML = filteredDocs.map((x) => {
     const date = esc(new Date(x.created_at).toLocaleDateString());
     if (x.status === 'completed') {
       const ed = parseExtraction(x);
       if (!ed) return `<tr><td></td><td>${esc(x.status)}</td><td>-</td><td>${date}</td><td colspan="15">Error de formato en JSON</td><td>${assignHtml(x)}</td></tr>`;
       const detailRow = expandedDocs.has(ed.documentId) ? `<tr><td colspan="20" style="padding:0">${productTableHtml(ed)}</td></tr>` : '';
-      return `<tr><td>${detailToggleHtml(ed)}</td><td>${esc(x.status)}</td><td>${sourceBadgeHtml(ed.extractionSource)}</td><td>${date}</td><td>${esc(ed.nit || '-')}</td><td>${esc(ed.factura || '-')}</td><td>${cur(ed.totalFactura)}</td><td>${cur(ed.baseExento)}</td><td>${cur(ed.base5)}</td><td>${cur(ed.iva5)}</td><td>${cur(ed.base8)}</td><td>${cur(ed.iva8)}</td><td>${cur(ed.base19)}</td><td>${cur(ed.iva19)}</td><td>${cur(ed.reteFuente)}</td><td>${cur(ed.reteIva)}</td><td>${cur(ed.reteIca)}</td><td>${cur(ed.impuestoConsumo)}</td><td>${cur(ed.diferenciaTotal)}</td><td>${assignHtml(x)}</td></tr>${detailRow}`;
+      const amountColor = (ed.documentFamily === 'sale_credit_note' || ed.documentFamily === 'purchase_credit_note')
+        ? 'color:#ff6b6b;font-weight:800'
+        : (ed.documentFamily === 'purchase_invoice' ? 'color:#a78bfa;' : '');
+      return `<tr><td>${detailToggleHtml(ed)}</td><td>${esc(x.status)}</td><td>${sourceBadgeHtml(ed)}</td><td>${date}</td><td>${esc(ed.nit || '-')}</td><td>${esc(ed.factura || '-')}</td><td style="${amountColor}">${cur(ed.totalFactura)}</td><td>${cur(ed.baseExento)}</td><td>${cur(ed.base5)}</td><td>${cur(ed.iva5)}</td><td>${cur(ed.base8)}</td><td>${cur(ed.iva8)}</td><td>${cur(ed.base19)}</td><td>${cur(ed.iva19)}</td><td>${cur(ed.reteFuente)}</td><td>${cur(ed.reteIva)}</td><td>${cur(ed.reteIca)}</td><td>${cur(ed.impuestoConsumo)}</td><td>${cur(ed.diferenciaTotal)}</td><td>${assignHtml(x)}</td></tr>${detailRow}`;
     }
     if (x.status === 'error') {
       return `<tr><td></td><td>error</td><td>-</td><td>${date}</td><td colspan="15">${esc(x.error_message || 'Desconocido')}</td><td>${assignHtml(x, `<button class="btn btn-s" onclick="retryDoc(${x.id})">Reenviar (${Number(x.retry_count || 0)}/${Number(x.max_retries || 3)})</button>`)}</td></tr>`;
@@ -1004,12 +1227,13 @@ async function changePassword() { const r = await api('/api/auth/change-password
 async function loadAudit() { const d = await api('/api/audit'); if (!d) return; document.getElementById('audit').innerHTML = d.map((x) => `<tr><td>${esc(new Date(x.created_at).toLocaleString())}</td><td>${esc(x.actor_name || '-')}</td><td>${esc(x.action)}</td><td>${esc(x.target_type || '-')} ${esc(x.target_id || '')}</td><td>${esc(JSON.stringify(x.detail_json || {}))}</td></tr>`).join(''); }
 
 async function exportExcel() {
-  if (docs.length === 0) return alert('Nada que exportar');
+  if (visibleDocs.length === 0) return alert('Nada que exportar en esta pestaña');
   try {
+    const tabConfig = getCurrentTabConfig();
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Reporte');
+    const ws = wb.addWorksheet(tabConfig.sheet);
     ws.properties.outlineLevelRow = 1;
-    ws.views = [{ state: 'frozen', ySplit: 2 }];
+    ws.views = [{ state: 'frozen', ySplit: 3 }];
     ws.columns = [
       { header: 'Nivel', key: 'nivel', width: 10 },
       { header: 'Fecha', key: 'fecha', width: 12 },
@@ -1039,24 +1263,34 @@ async function exportExcel() {
       { header: 'Total Producto', key: 'totalProducto', width: 16 }
     ];
     ws.insertRow(1, {
-      nivel: 'GUIA',
-      fecha: 'Usa el simbolo +/- del margen izquierdo para expandir o contraer los productos por factura.'
+      nivel: 'REPORTE',
+      fecha: tabConfig.label
     });
     ws.mergeCells(1, 2, 1, ws.columns.length);
     ws.getCell('A1').font = { bold: true, color: { argb: 'FFFFD36C' } };
     ws.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF16212B' } };
-    ws.getCell('B1').font = { italic: true, bold: true, color: { argb: 'FFF7FBFF' } };
+    ws.getCell('B1').font = { bold: true, size: 14, color: { argb: 'FFF7FBFF' } };
     ws.getCell('B1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF16212B' } };
-    ws.getRow(2).font = { bold: true };
-    ws.getRow(2).height = 22;
+
+    ws.insertRow(2, {
+      nivel: 'GUIA',
+      fecha: 'Usa el simbolo +/- del margen izquierdo para expandir o contraer los productos por factura.'
+    });
+    ws.mergeCells(2, 2, 2, ws.columns.length);
+    ws.getCell('A2').font = { bold: true, color: { argb: 'FFFFD36C' } };
+    ws.getCell('A2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF16212B' } };
+    ws.getCell('B2').font = { italic: true, bold: true, color: { argb: 'FFF7FBFF' } };
+    ws.getCell('B2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF16212B' } };
+    ws.getRow(3).font = { bold: true };
+    ws.getRow(3).height = 22;
     ws.autoFilter = {
-      from: { row: 2, column: 1 },
-      to: { row: 2, column: ws.columns.length }
+      from: { row: 3, column: 1 },
+      to: { row: 3, column: ws.columns.length }
     };
     ws.getColumn('A').alignment = { horizontal: 'center' };
     ws.getColumn('E').alignment = { horizontal: 'center' };
 
-    const completed = docs.filter((x) => x.status === 'completed' && x.extracted_data);
+    const completed = visibleDocs.filter((x) => x.status === 'completed' && x.extracted_data);
     const reportTotals = {
       totalFactura: 0,
       baseExento: 0,
@@ -1201,7 +1435,7 @@ async function exportExcel() {
     const a = document.createElement('a');
     const downloadUrl = URL.createObjectURL(blob);
     a.href = downloadUrl;
-    a.download = 'Reporte_Detallado.xlsx';
+    a.download = `${tabConfig.file}_${new Date().toISOString().slice(0, 10)}.xlsx`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1235,15 +1469,28 @@ async function exportExcel() {
 async function upload(files, useRelative) {
   if (!files || files.length === 0) return;
   try {
-    const estimatedSeconds = files.length * 18;
+    const queueStatus = await api('/api/queue/status');
+    const secondsPerDoc = getObservedSecondsPerDoc(queueStatus);
+    const estimatedSeconds = files.length * secondsPerDoc;
     setUploadStatus(`Subiendo ${files.length} archivo(s)... Estimado inicial: ${formatEta(estimatedSeconds)}.`);
-    setEtaStatus(`Carga preparada para ${files.length} documento(s). Tiempo base aproximado ${formatEta(estimatedSeconds)}.`);
+    setEtaStatus(`Carga preparada para ${files.length} documento(s). Tiempo base aproximado ${formatEta(estimatedSeconds)} con promedio actual de ${formatEta(secondsPerDoc)} por factura.`);
     setEtaProgress(0, `0/${files.length} procesadas`);
     const fd = new FormData();
     const paths = [];
     for (const file of files) {
+      let folderPrefix = '';
+      if (currentDocTab === 'purchase_invoice') folderPrefix = 'COMPRA/';
+      else if (currentDocTab === 'purchase_credit_note') folderPrefix = 'NC_COMPRA/';
+      else if (currentDocTab === 'sale_credit_note') folderPrefix = 'NC_VENTA/';
+      else if (currentDocTab === 'sale_invoice') folderPrefix = 'VENTA/';
+      
+      let relative = useRelative ? (file.webkitRelativePath || file.name) : file.name;
+      if (folderPrefix) {
+          relative = folderPrefix + relative;
+      }
+      
       fd.append('pdfs', file);
-      paths.push(useRelative ? (file.webkitRelativePath || file.name) : file.name);
+      paths.push(relative);
     }
     fd.append('relative_paths', JSON.stringify(paths));
     fd.append('max_retries', '3');
@@ -1282,6 +1529,7 @@ async function init() {
   if (canManage()) document.getElementById('scope').value = 'all';
   renderShell();
   if (canManage()) await loadTeamUsers();
+  await loadLocalPaths();
   startDocsAutoRefresh();
   setView('main');
 }

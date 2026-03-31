@@ -417,6 +417,16 @@ async function ensureRuntimeSchema() {
         )
     `);
     await query(`
+        CREATE TABLE IF NOT EXISTS local_sync_paths (
+            id SERIAL PRIMARY KEY,
+            company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+            path TEXT NOT NULL,
+            name VARCHAR(100),
+            last_sync TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await query(`
         CREATE TABLE IF NOT EXISTS subscriptions (
             id SERIAL PRIMARY KEY,
             company_id INTEGER UNIQUE REFERENCES companies(id) ON DELETE CASCADE,
@@ -1660,6 +1670,67 @@ const upload = multer({
     }
     });
 
+app.get('/api/sync/paths', authenticateToken, async (req, res) => {
+    try {
+        const { rows } = await query('SELECT * FROM local_sync_paths WHERE company_id = $1 ORDER BY created_at ASC', [req.user.company_id]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Fallo al cargar rutas.' }); }
+});
+
+app.post('/api/sync/paths', authenticateToken, async (req, res) => {
+    const { path: p, name } = req.body;
+    if (!p) return res.status(400).json({ error: 'Ruta obligatoria.' });
+    try {
+        await query('INSERT INTO local_sync_paths (company_id, path, name) VALUES ($1,$2,$3)', [req.user.company_id, p, name || 'Carpeta Local']);
+        res.json({ ok: true });
+    } catch (err) { res.status(500).json({ error: 'Fallo al guardar ruta.' }); }
+});
+
+app.delete('/api/sync/paths/:id', authenticateToken, async (req, res) => {
+    try {
+        await query('DELETE FROM local_sync_paths WHERE company_id = $1 AND id = $2', [req.user.company_id, req.params.id]);
+        res.json({ ok: true });
+    } catch (err) { res.status(500).json({ error: 'Fallo al eliminar ruta.' }); }
+});
+
+app.post('/api/sync/folder', authenticateToken, async (req, res) => {
+    let targetPath = req.body.path;
+    const pathId = req.body.id;
+
+    if (pathId) {
+        const { rows } = await query('SELECT path FROM local_sync_paths WHERE id = $1 AND company_id = $2', [pathId, req.user.company_id]);
+        if (rows.length > 0) targetPath = rows[0].path;
+    }
+    
+    if (!targetPath) return res.status(400).json({ error: 'Debes proporcionar una ruta o un ID.' });
+
+    try {
+        if (!await fs.pathExists(targetPath)) return res.status(400).json({ error: 'La ruta no existe o es inaccesible.' });
+
+        const stats = await fs.stat(targetPath);
+        if (!stats.isDirectory()) return res.status(400).json({ error: 'No es una carpeta.' });
+
+        const files = await fs.readdir(targetPath);
+        const pdfFiles = files.filter(f => f.toLowerCase().endsWith('.pdf'));
+        if (pdfFiles.length === 0) return res.json({ ok: true, message: 'No hay PDFs.' });
+
+        let imported = 0;
+        for (const filename of pdfFiles) {
+            const src = path.join(targetPath, filename);
+            const uuidPrefix = crypto.randomUUID().slice(0, 8);
+            const internalName = `${Date.now()}_${uuidPrefix}_${filename}`;
+            const dest = path.join(INPUT_DIR, internalName);
+            await fs.copy(src, dest);
+            await query(`INSERT INTO documents (company_id, uploaded_by, filename, original_filename, status, source_path) VALUES ($1,$2,$3,$4,'pending',$5)`, [req.user.company_id, req.user.id, internalName, filename, src]);
+            imported++;
+        }
+        if (pathId) await query('UPDATE local_sync_paths SET last_sync = NOW() WHERE id = $1', [pathId]);
+
+        triggerQueueProcessing();
+        res.json({ ok: true, message: `Sincronizados ${imported} archivos.` });
+    } catch (err) { res.status(500).json({ error: 'Error en sincronización.' }); }
+});
+
 app.post('/api/upload', authenticateToken, uploadRateLimiter, (req, res, next) => {
     upload.array('pdfs')(req, res, (err) => {
         if (err) {
@@ -1885,7 +1956,36 @@ app.get('/api/queue/status', authenticateToken, async (req, res) => {
             ORDER BY id DESC
             LIMIT 10
         `, [req.user.company_id]);
-        res.json({ counts: counts.rows, recent: recent.rows, runtime: getQueueRuntimeState() });
+        const timing = await query(`
+            SELECT
+                ROUND(COALESCE(AVG(duration_ms) FILTER (
+                    WHERE action = 'document_processed'
+                      AND status = 'completed'
+                      AND duration_ms IS NOT NULL
+                      AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+                ), 0)::numeric, 0) AS avg_processing_ms,
+                ROUND(COALESCE(AVG(duration_ms) FILTER (
+                    WHERE action = 'document_processed'
+                      AND status = 'completed'
+                      AND provider IN ('gemini', 'groq')
+                      AND duration_ms IS NOT NULL
+                      AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+                ), 0)::numeric, 0) AS avg_ai_processing_ms,
+                COUNT(*) FILTER (
+                    WHERE action = 'document_processed'
+                      AND status = 'completed'
+                      AND duration_ms IS NOT NULL
+                      AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+                )::int AS sample_size
+            FROM usage_logs
+            WHERE company_id = $1
+        `, [req.user.company_id]);
+        res.json({
+            counts: counts.rows,
+            recent: recent.rows,
+            runtime: getQueueRuntimeState(),
+            timing: timing.rows[0] || null
+        });
     } catch (err) {
         res.status(500).json({ error: 'No se pudo consultar la cola.' });
     }
